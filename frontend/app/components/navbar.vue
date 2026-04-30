@@ -108,6 +108,7 @@ const navItems = [
   { label: 'Dashboard', path: '/' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Queues', path: '/queues' },
+  { label: 'Concurrency', path: '/concurrency' },
   { label: 'Workers', path: '/workers' },
   { label: 'Workflows', path: '/workflows' },
 ]

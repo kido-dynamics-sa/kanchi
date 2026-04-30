@@ -222,6 +222,14 @@ class QueueLoadSummary(BaseModel):
     sampled_at: datetime
 
 
+class CompanyConcurrencyCounter(BaseModel):
+    """Redis-backed company concurrency entry."""
+
+    key: str
+    company_id: str
+    value: int = 0
+
+
 class WorkerInfo(BaseModel):
     """Worker information model"""
 

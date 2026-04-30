@@ -90,6 +90,7 @@ def create_app() -> FastAPI:
 
     from api.action_config_routes import create_router as create_action_config_router
     from api.auth_routes import create_router as create_auth_router
+    from api.concurrency_routes import create_router as create_concurrency_router
     from api.config_routes import create_router as create_config_router
     from api.environment_routes import create_router as create_environment_router
     from api.log_routes import create_router as create_log_router
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(create_workflow_router(app_state))
     app.include_router(create_action_config_router(app_state))
     app.include_router(create_auth_router(app_state))
+    app.include_router(create_concurrency_router(app_state))
     app.include_router(create_metrics_router(app_state))
     app.include_router(create_config_router(app_state))
 

@@ -111,6 +111,12 @@ export interface QueueLoadSummaryDTO {
   sampled_at: string
 }
 
+export interface CompanyConcurrencyCounterDTO {
+  key: string
+  company_id: string
+  value: number
+}
+
 class ApiService {
   private api: Api<unknown>
 
@@ -351,6 +357,15 @@ class ApiService {
     const response = await this.api.request({
       path: '/api/queues/load',
       method: 'GET'
+    })
+    return response.data
+  }
+
+  async getCompanyConcurrency(limit = 2000): Promise<CompanyConcurrencyCounterDTO[]> {
+    const response = await this.api.request({
+      path: '/api/concurrency/company',
+      method: 'GET',
+      query: { limit }
     })
     return response.data
   }
