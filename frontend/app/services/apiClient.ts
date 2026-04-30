@@ -103,6 +103,20 @@ export interface TaskProgressSnapshotResponse {
   history: TaskProgressEventResponse[]
 }
 
+export interface QueueLoadSummaryDTO {
+  queue: string
+  running_tasks: number
+  scheduled_tasks: number
+  tracked_tasks: number
+  sampled_at: string
+}
+
+export interface CompanyConcurrencyCounterDTO {
+  key: string
+  company_id: string
+  value: number
+}
+
 class ApiService {
   private api: Api<unknown>
 
@@ -335,6 +349,23 @@ class ApiService {
       path: '/api/tasks/failed/recent',
       method: 'GET',
       query: params
+    })
+    return response.data
+  }
+
+  async getQueueLoad(): Promise<QueueLoadSummaryDTO[]> {
+    const response = await this.api.request({
+      path: '/api/queues/load',
+      method: 'GET'
+    })
+    return response.data
+  }
+
+  async getCompanyConcurrency(limit = 2000): Promise<CompanyConcurrencyCounterDTO[]> {
+    const response = await this.api.request({
+      path: '/api/concurrency/company',
+      method: 'GET',
+      query: { limit }
     })
     return response.data
   }

@@ -1,274 +1,210 @@
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file is a practical operating guide for coding agents working in this repository.
 
 ## Project Overview
 
-Kanchi is a Celery task monitoring system with a Python FastAPI backend and Nuxt.js frontend. The backend monitors Celery events via message broker and provides real-time WebSocket updates to the frontend.
+Kanchi is a real-time Celery task monitoring system:
 
-## Development Commands
+- Backend: FastAPI + SQLAlchemy + Alembic in `agent/`
+- Frontend: Nuxt 4 (Vue 3 + TypeScript + Pinia) in `frontend/`
+- Transport: REST API + WebSocket for live updates
+- Data: SQLite by default, PostgreSQL/MySQL supported via `DATABASE_URL`
 
-### Quick Start (from root directory)
+## First Steps For Agents
+
+1. Read this file and `README.md`.
+2. Prefer `make dev` from repo root for local development.
+3. If changing backend API contracts, regenerate frontend API types.
+4. Validate only what you changed (targeted checks first).
+
+## Quick Commands
+
+From repo root:
+
 ```bash
-# Start both backend and frontend in development mode
-make dev
-
-# View unified logs (backend and frontend)
-make logs
-
-# Start backend only
-make backend
-
-# Start frontend only
-make frontend
+make dev         # backend + frontend in dev mode
+make logs        # tail unified log file
+make backend     # backend only
+make frontend    # frontend only
 ```
 
-### Backend (from `agent/` directory)
+From `agent/`:
+
 ```bash
-# Run the backend server (recommended)
+poetry install
 poetry run python app.py
-
-# Alternative legacy entry point
-poetry run python main.py
-
-# Run with custom broker
-poetry run python app.py --broker amqp://guest:guest@localhost:5672//
-
-# Development with auto-reload
 poetry run python main.py --reload
 
-# Linting and formatting
 poetry run black .
 poetry run ruff check .
 poetry run mypy .
 
-# Database migrations (Alembic)
-poetry run alembic current              # Check current migration version
-poetry run alembic upgrade head         # Apply all pending migrations
-poetry run alembic revision --autogenerate -m "Description"  # Create new migration
+poetry run alembic current
+poetry run alembic upgrade head
+poetry run alembic revision --autogenerate -m "message"
+
+# backend tests
+./run_tests.sh
 ```
 
-### Frontend (from `frontend/` directory)
+From `frontend/`:
+
 ```bash
-# Development server
+npm install
 npm run dev
-
-# Build for production
 npm run build
-
-# Preview production build
 npm run preview
-
-# Generate static site
 npm run generate
 
-# Regenerate types from backend OpenAPI
-npx swagger-typescript-api generate -p http://localhost:8765/openapi.json -o app/src/types -n api.ts --modular
+# regenerate API types from backend OpenAPI
+npm run generate:api:local
 ```
 
-### Testing Environment (from `scripts/test-celery-app/`)
+From `scripts/test-celery-app/`:
+
 ```bash
-# Start test environment (RabbitMQ, Redis, Workers)
 make start
-
-# Generate test tasks
-make test-simple    # Simple tasks
-make test-mixed     # Mixed load for 60 seconds  
-make test-stress    # 1000 tasks stress test
-make test-failing   # Failing tasks
-
-# Monitor services
-make monitor        # Open RabbitMQ and Flower UIs
-make logs           # Show all service logs
-make status         # Check service health
-```
-
-### Docker Deployment
-```bash
-# Build and run with Docker
-docker build -t kanchi .
-docker run -p 8765:8765 -p 3000:3000 kanchi
-
-# Or use Docker Compose (from root)
-docker-compose up
-
-# With custom broker URL
-docker run -p 8765:8765 -p 3000:3000 -e CELERY_BROKER_URL=amqp://user:pass@host:5672// kanchi
-```
-
-## Architecture
-
-### Backend Structure (`agent/`)
-- **`app.py`**: Main FastAPI application with WebSocket support and integrated frontend serving
-- **`main.py`**: Legacy entry point (redirects to FastAPI app)
-- **`monitor.py`**: Core Celery event monitoring via `CeleryEventMonitor`
-- **`database.py`**: SQLite database manager with SQLAlchemy async support
-- **`models.py`**: Pydantic data models for tasks, workers, events
-- **`database_models.py`**: SQLAlchemy database models
-- **`api/`**: REST API routes organized by resource (tasks, workers, websockets)
-- **`services/`**: Business logic services for task and worker management
-- **`connection_manager.py`**: WebSocket connection management
-- **`event_handler.py`**: Celery event processing and broadcasting
-- **`config.py`**: Configuration management
-
-### Frontend Structure (`frontend/`)
-- **Framework**: Nuxt 4 (Vue 3) with TypeScript
-- **UI**: TailwindCSS + Radix UI components (reka-ui)
-- **State**: Pinia stores for centralized state management
-- **Types**: Auto-generated from backend OpenAPI schema in `app/src/types/`
-- **Services**: Centralized API service layer using generated types
-
-### Key Patterns
-- **Type Safety**: All API interactions use auto-generated TypeScript types
-- **Real-time Updates**: WebSocket broadcasts for live task monitoring
-- **Persistence**: SQLite database for task history and worker state
-- **Background Jobs**: Async tasks for orphan detection and cleanup
-- **Integrated Serving**: FastAPI serves both API and built frontend
-
-## Database
-
-Uses SQLAlchemy with Alembic migrations for schema management. Supports:
-- **SQLite** (default, for development)
-- **PostgreSQL** (recommended for production)
-
-### Features
-- Task persistence and history
-- Worker status tracking
-- Orphan task detection and retry batches
-- Comprehensive indexing for performance
-
-### Migration System
-- **Tool**: Alembic for database migrations
-- **Auto-run**: Migrations execute automatically on app startup
-- **BYOD**: Bring-Your-Own-Database via `DATABASE_URL` environment variable
-
-Database models defined in `agent/database.py`.
-
-## Logging
-
-Kanchi uses a unified logging system that captures logs from both backend and frontend in a single file. **This feature is only available in development mode.**
-
-### Enabling Logging
-Set the `DEVELOPMENT_MODE` environment variable to enable unified logging:
-```bash
-export DEVELOPMENT_MODE=true
-```
-
-The `make dev` command automatically enables development mode.
-
-### Log File
-- **Location**: `agent/kanchi.log`
-- **Format**: Timestamped logs with source prefix `[BACKEND]` or `[FRONTEND]`
-- **Behavior**: Cleaned on backend startup (only in development mode)
-
-### Viewing Logs
-```bash
-# Tail logs (last 100 lines and follow)
+make test-simple
+make test-mixed
+make test-stress
+make test-failing
+make status
 make logs
-
-# Or manually
-tail -n 100 -f agent/kanchi.log
 ```
 
-### Frontend Logging
-```typescript
-// Use the logger service in frontend code
-import { useLogger } from '~/services/logger'
+## Architecture Map
 
-const logger = useLogger()
+Backend (`agent/`):
 
-logger.debug('Debug message', { context: 'data' })
-logger.info('Info message')
-logger.warning('Warning message')
-logger.error('Error message', { error: 'details' })
-logger.critical('Critical message')
-```
+- `app.py`: FastAPI app creation, middleware, router wiring, lifecycle startup/shutdown.
+- `main.py`: legacy entrypoint that runs `app:app` via uvicorn.
+- `monitor.py`: Celery event ingestion.
+- `event_handler.py`: maps incoming events to persistence + broadcast.
+- `connection_manager.py`: WebSocket connections and broadcasting.
+- `database.py`: DB engine/session/migration integration.
+- `api/`: route modules (`task_routes.py`, `worker_routes.py`, `websocket_routes.py`, etc).
+- `services/`: application/business logic.
+- `security/`: auth manager, dependencies, token handling.
+- `alembic/`: migrations.
 
-Frontend logs are sent to the backend via `/api/logs/frontend` and written to the unified log file (only in development mode).
+Frontend (`frontend/`):
 
-## Configuration
+- `nuxt.config.ts`: runtime config (`apiUrl`, `wsUrl`, version).
+- `app/stores/`: Pinia stores (`tasks`, `workers`, `websocket`, etc).
+- `app/services/`: API and frontend services.
+- `app/components/`: UI, layout, and domain components.
+- `app/src/types/`: generated OpenAPI types.
+- `generate-api-types.sh`: standard type generation script (axios template).
 
-### Environment Variables
+## Agent Rules
+
+1. Keep changes scoped and minimal; avoid broad refactors unless asked.
+2. Do not edit generated files directly:
+	- `frontend/app/src/types/`
+3. If backend route/request/response models change, regenerate frontend types.
+4. Preserve real-time behavior:
+	- event handler updates persistence
+	- websocket broadcasts remain functional
+	- frontend stores still handle both live and static data flows
+5. Prefer extending existing service/store patterns over ad-hoc logic in routes/components.
+6. Maintain Python line length 100 and existing lint/type standards.
+
+## Environment Variables
+
+Common backend env vars:
+
 ```bash
-# Backend
 CELERY_BROKER_URL=amqp://guest:guest@localhost:5672//
+DATABASE_URL=sqlite:///kanchi.db
 WS_HOST=localhost
 WS_PORT=8765
-DATABASE_URL=sqlite:///kanchi.db
-DEVELOPMENT_MODE=true  # Enable unified logging (default: false)
 LOG_LEVEL=INFO
-LOG_FILE=kanchi.log
+DEVELOPMENT_MODE=false
 
-# Frontend (Nuxt runtime config)
-NUXT_PUBLIC_API_URL=http://localhost:8765
-NUXT_PUBLIC_WS_URL=ws://localhost:8765/ws
-
-# Docker environment
-CELERY_BROKER_URL=amqp://guest:guest@localhost:5672//
-NITRO_PORT=3000
-NITRO_HOST=0.0.0.0
+# security / auth
+AUTH_ENABLED=false
+AUTH_BASIC_ENABLED=false
+AUTH_GOOGLE_ENABLED=false
+AUTH_GITHUB_ENABLED=false
+SESSION_SECRET_KEY=<set-in-production>
+TOKEN_SECRET_KEY=<set-in-production>
 ```
 
-### Code Standards
-- **Python**: Black formatting, Ruff linting, MyPy type checking
-- **Line length**: 100 characters for Python
-- **Python version**: 3.8+ minimum
+Frontend runtime env vars:
 
-## Development Workflow
+```bash
+NUXT_PUBLIC_API_URL=http://localhost:8765
+NUXT_PUBLIC_WS_URL=ws://localhost:8765/ws
+NUXT_PUBLIC_KANCHI_VERSION=dev
+```
 
-1. **Backend changes**: Restart FastAPI server (`poetry run python app.py`)
-2. **Frontend changes**: Auto-reload via `npm run dev`
-3. **API changes**: Regenerate frontend types after schema updates
-4. **Database changes**: Use SQLAlchemy async session patterns
-5. **Testing**: Use test environment in `scripts/test-celery-app/`
+## Logging And Observability
 
-## Key Files and Locations
+- Unified backend/frontend file logging is enabled only when `DEVELOPMENT_MODE=true`.
+- Log file defaults to `agent/kanchi.log`.
+- `make logs` tails this file.
+- Health endpoints:
+  - `/api/health` (public)
+  - `/api/health/details` (auth-protected when auth is enabled)
 
-### Configuration Files
-- **`agent/pyproject.toml`**: Python dependencies and tool configuration
-- **`frontend/package.json`**: Node.js dependencies and scripts
-- **`Dockerfile`**: Multi-stage build for production deployment
-- **`scripts/test-celery-app/docker-compose.yml`**: Test environment setup
+## Typical Change Workflows
 
-### Documentation
-- **`ARCHITECTURE_ROADMAP.md`**: Detailed system architecture and future plans
-- **`FRONTEND_ARCHITECTURE.md`**: Frontend patterns and best practices
-- **`KANCHI_DATABASE_SCHEMA.md`**: Complete database schema documentation
+### Add/Change Backend API
 
-### Auto-generated (DO NOT EDIT)
-- **`frontend/app/src/types/`**: TypeScript types from backend OpenAPI schema
+1. Update route/service/model in `agent/`.
+2. Run focused backend checks.
+3. Regenerate frontend API types:
+	- `cd frontend && npm run generate:api:local`
+4. Update frontend store/service consumers.
+5. Smoke test critical UI flows and websockets.
 
-## FastAPI Integration
+### Add Database Fields
 
-The main application (`app.py`) integrates:
-- **API endpoints**: RESTful API for task and worker management
-- **WebSocket**: Real-time event broadcasting
-- **Static files**: Serves built Nuxt.js frontend
-- **Background tasks**: Celery event monitoring and database operations
+1. Update SQLAlchemy models.
+2. Create Alembic migration.
+3. Verify upgrade path with `alembic upgrade head`.
+4. Update Pydantic schemas and API responses.
 
-Access points:
-- **API**: `http://localhost:8765/api/*`
-- **WebSocket**: `ws://localhost:8765/ws`
-- **Frontend**: `http://localhost:8765/` (serves Nuxt.js app)
-- **OpenAPI docs**: `http://localhost:8765/docs`
+### Frontend Feature Work
 
-## Common Development Tasks
+1. Prefer store-driven state changes in `app/stores/`.
+2. Keep API calls in service/store layer.
+3. Reuse existing component patterns and utilities.
 
-### Adding New API Endpoint
-1. Add route in appropriate `api/` module
-2. Update OpenAPI schema if needed
-3. Regenerate frontend types
-4. Add method to appropriate Pinia store
-5. Use in components via store
+## Validation Checklist (Before Finishing)
 
-### Database Schema Changes
-1. Update SQLAlchemy models in `database_models.py`
-2. Create migration script if needed
-3. Test with development database
-4. Update related Pydantic models in `models.py`
+Run only relevant checks for touched areas:
 
-### WebSocket Event Broadcasting
-1. Add event type to `event_handler.py`
-2. Update WebSocket message handling in `connection_manager.py`
-3. Handle in frontend WebSocket store
-4. Update UI components to react to new events
+Backend-focused changes:
 
-When making changes, always consider the real-time nature of the system and ensure WebSocket broadcasts continue working for live monitoring updates.
+- `cd agent && poetry run ruff check .`
+- `cd agent && poetry run mypy .`
+- `cd agent && ./run_tests.sh` (or targeted tests)
+
+Frontend-focused changes:
+
+- `cd frontend && npm run build`
+
+Integration-sensitive changes:
+
+- Start app via `make dev`
+- Confirm API reachable on `:8765`
+- Confirm frontend reachable on `:3000` (dev) or served build as configured
+- Confirm websocket-dependent UI updates still flow
+
+## High-Impact Files
+
+- `agent/app.py`
+- `agent/config.py`
+- `agent/event_handler.py`
+- `agent/monitor.py`
+- `agent/database.py`
+- `agent/security/`
+- `frontend/nuxt.config.ts`
+- `frontend/app/stores/`
+- `frontend/app/services/`
+
+## Notes
+
+- Root `docker-compose.yaml` builds and runs a full local containerized setup.
+- `scripts/test-celery-app/` is useful for realistic broker/worker event generation.
+- The frontend has its own deeper guide in `frontend/AGENTS.md`; use this root guide for repo-wide coordination and that file for frontend-specific conventions.
