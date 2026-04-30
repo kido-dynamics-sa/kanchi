@@ -103,6 +103,14 @@ export interface TaskProgressSnapshotResponse {
   history: TaskProgressEventResponse[]
 }
 
+export interface QueueLoadSummaryDTO {
+  queue: string
+  running_tasks: number
+  scheduled_tasks: number
+  tracked_tasks: number
+  sampled_at: string
+}
+
 class ApiService {
   private api: Api<unknown>
 
@@ -335,6 +343,14 @@ class ApiService {
       path: '/api/tasks/failed/recent',
       method: 'GET',
       query: params
+    })
+    return response.data
+  }
+
+  async getQueueLoad(): Promise<QueueLoadSummaryDTO[]> {
+    const response = await this.api.request({
+      path: '/api/queues/load',
+      method: 'GET'
     })
     return response.data
   }
