@@ -13,19 +13,27 @@ class ConcurrencyEntry:
 
     key: str
     company_id: str
+    counter_type: str
     value: int
 
 
 class CompanyConcurrencyService:
     """Read company concurrency counters from Redis."""
 
-    def __init__(self, redis_url: str | None, key_prefix: str = "company_concurrency:"):
+    def __init__(
+        self,
+        redis_url: str | None,
+        key_prefixes: list[str] | tuple[str, ...] | None = None,
+    ):
         self.redis_url = redis_url
-        self.key_prefix = key_prefix
+        if key_prefixes:
+            self.key_prefixes = [prefix for prefix in key_prefixes if prefix]
+        else:
+            self.key_prefixes = ["company_concurrency:", "company_outstanding_tasks:"]
 
     def list_entries(self, limit: int = 2000) -> list[ConcurrencyEntry]:
-        """Return all counters matching the configured prefix."""
-        if not self.redis_url:
+        """Return all counters matching the configured prefixes."""
+        if not self.redis_url or not self.key_prefixes:
             return []
 
         try:
@@ -35,38 +43,82 @@ class CompanyConcurrencyService:
             return []
 
         client = redis_module.Redis.from_url(self.redis_url, decode_responses=True)
-        pattern = f"{self.key_prefix}*"
 
-        try:
-            keys = list(client.scan_iter(match=pattern, count=500))
-        except redis_exceptions.RedisError:
-            return []
+        keys: list[str] = []
+        key_prefix_by_key: dict[str, str] = {}
+        for prefix in self.key_prefixes:
+            pattern = f"{prefix}*"
+            try:
+                for key in client.scan_iter(match=pattern, count=500):
+                    if key not in key_prefix_by_key:
+                        key_prefix_by_key[key] = prefix
+                        keys.append(key)
+            except redis_exceptions.RedisError:
+                continue
 
-        if limit > 0:
+        if limit > 0 and len(keys) > limit:
             keys = keys[:limit]
 
         if not keys:
             return []
 
-        try:
-            values = client.mget(keys)
-        except redis_exceptions.RedisError:
-            values = [None] * len(keys)
+        values = self._read_counter_values(client, keys, redis_exceptions)
 
         entries: list[ConcurrencyEntry] = []
         for key, raw_value in zip(keys, values, strict=False):
             if not key:
                 continue
-            company_id = key[len(self.key_prefix) :] if key.startswith(self.key_prefix) else key
+            prefix = key_prefix_by_key.get(key, "")
+            company_id = key[len(prefix) :] if prefix and key.startswith(prefix) else key
+            counter_type = prefix.removesuffix(":") if prefix else "unknown"
             entries.append(
                 ConcurrencyEntry(
                     key=key,
                     company_id=company_id,
+                    counter_type=counter_type,
                     value=self._to_int(raw_value),
                 )
             )
 
         return sorted(entries, key=lambda item: item.value, reverse=True)
+
+    @staticmethod
+    def _read_counter_values(
+        client: Any, keys: list[str], redis_exceptions: Any
+    ) -> list[int | None]:
+        """Read values using type-appropriate Redis commands.
+
+        Outstanding task counters are often stored as Redis sorted sets, which require
+        ZCARD instead of GET/MGET.
+        """
+        if not keys:
+            return []
+
+        values: list[int | None] = []
+        for key in keys:
+            try:
+                key_type = client.type(key)
+            except redis_exceptions.RedisError:
+                values.append(None)
+                continue
+
+            try:
+                if key_type == "zset":
+                    values.append(int(client.zcard(key)))
+                elif key_type == "set":
+                    values.append(int(client.scard(key)))
+                elif key_type == "string":
+                    values.append(client.get(key))
+                elif key_type == "hash":
+                    values.append(int(client.hlen(key)))
+                elif key_type == "list":
+                    values.append(int(client.llen(key)))
+                else:
+                    values.append(client.get(key))
+            except redis_exceptions.RedisError:
+                values.append(None)
+
+        return values
 
     @staticmethod
     def _to_int(value: Any) -> int:

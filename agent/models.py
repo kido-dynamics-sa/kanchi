@@ -227,6 +227,7 @@ class CompanyConcurrencyCounter(BaseModel):
 
     key: str
     company_id: str
+    counter_type: str
     value: int = 0
 
 

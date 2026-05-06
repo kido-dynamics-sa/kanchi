@@ -211,7 +211,7 @@ const environmentStore = useEnvironmentStore()
 const urlQuerySync = useUrlQuerySync()
 
 const workerNameFilter = ref('')
-const statusFilter = ref<'all' | 'online' | 'offline' | 'active' | 'unknown'>('all')
+const statusFilter = ref<'all' | 'online' | 'offline' | 'active' | 'unknown'>('online')
 const sortBy = ref<'hostname' | 'status' | 'active_tasks' | 'processed_tasks' | 'timestamp'>('hostname')
 const sortDirection = ref<'asc' | 'desc'>('asc')
 

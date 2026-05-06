@@ -114,6 +114,7 @@ export interface QueueLoadSummaryDTO {
 export interface CompanyConcurrencyCounterDTO {
   key: string
   company_id: string
+  counter_type: string
   value: number
 }
 

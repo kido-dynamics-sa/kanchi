@@ -62,6 +62,9 @@ class Config:
     company_concurrency_prefix: str = os.getenv(
         "COMPANY_CONCURRENCY_PREFIX", "company_concurrency:"
     )
+    company_outstanding_tasks_prefix: str = os.getenv(
+        "COMPANY_OUTSTANDING_TASKS_PREFIX", "company_outstanding_tasks:"
+    )
 
     # Database configuration
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///kanchi.db")  # Default to SQLite
