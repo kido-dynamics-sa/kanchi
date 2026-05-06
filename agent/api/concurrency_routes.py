@@ -38,7 +38,7 @@ def create_router(app_state) -> APIRouter:
         limit: int = Query(default=2000, ge=1, le=10000),
         _current_user=Depends(require_user_dep),
     ):
-        """List all Redis counters under the company concurrency prefix."""
+        """List all Redis counters for company concurrency and outstanding tasks."""
         config = app_state.config or Config.from_env()
 
         redis_url = config.company_concurrency_redis_url or config.redis_url
@@ -49,7 +49,10 @@ def create_router(app_state) -> APIRouter:
 
         service = CompanyConcurrencyService(
             redis_url=redis_url,
-            key_prefix=config.company_concurrency_prefix,
+            key_prefixes=[
+                config.company_concurrency_prefix,
+                config.company_outstanding_tasks_prefix,
+            ],
         )
         entries = service.list_entries(limit=limit)
 
@@ -57,6 +60,7 @@ def create_router(app_state) -> APIRouter:
             {
                 "key": item.key,
                 "company_id": item.company_id,
+                "counter_type": item.counter_type,
                 "value": item.value,
             }
             for item in entries

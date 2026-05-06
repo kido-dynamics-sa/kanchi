@@ -3,7 +3,7 @@
     <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div>
         <h1 class="text-2xl font-bold text-text-primary mb-1">Company Concurrency</h1>
-        <p class="text-text-secondary">Current values from Redis keys prefixed with company_concurrency:</p>
+        <p class="text-text-secondary">Current values from Redis keys prefixed with company_concurrency: and company_outstanding_tasks:</p>
       </div>
 
       <div class="flex items-center gap-2 text-sm text-text-secondary">
@@ -33,6 +33,17 @@
           />
         </div>
         <div>
+          <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Counter Type</label>
+          <select
+            v-model="counterType"
+            class="h-10 w-full rounded-md border border-border-subtle bg-background-base px-3 text-sm text-text-primary"
+          >
+            <option value="all">All</option>
+            <option value="company_concurrency">company_concurrency</option>
+            <option value="company_outstanding_tasks">company_outstanding_tasks</option>
+          </select>
+        </div>
+        <div>
           <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Sort By</label>
           <select
             v-model="sortBy"
@@ -40,10 +51,11 @@
           >
             <option value="value">Value</option>
             <option value="company_id">Company UUID</option>
+            <option value="counter_type">Counter Type</option>
             <option value="key">Key</option>
           </select>
         </div>
-        <div>
+        <div class="md:col-span-3">
           <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Order</label>
           <select
             v-model="sortDirection"
@@ -62,7 +74,7 @@
         <p class="mt-2 text-2xl font-semibold text-text-primary">{{ filteredEntries.length }}</p>
       </div>
       <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
-        <p class="text-xs uppercase tracking-wide text-text-muted">Total Running</p>
+        <p class="text-xs uppercase tracking-wide text-text-muted">Total Value</p>
         <p class="mt-2 text-2xl font-semibold text-text-primary">{{ totalValue }}</p>
       </div>
       <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
@@ -94,6 +106,7 @@
           <thead>
             <tr class="border-b border-border-subtle text-left text-text-muted">
               <th class="px-4 py-3 font-medium">Company UUID</th>
+              <th class="px-4 py-3 font-medium">Counter Type</th>
               <th class="px-4 py-3 font-medium">Current Value</th>
               <th class="px-4 py-3 font-medium">Redis Key</th>
             </tr>
@@ -105,6 +118,7 @@
               class="border-b border-border-subtle/60 last:border-b-0"
             >
               <td class="px-4 py-3 text-text-primary font-medium">{{ entry.company_id }}</td>
+              <td class="px-4 py-3 text-text-secondary">{{ entry.counter_type }}</td>
               <td class="px-4 py-3 text-text-primary">{{ entry.value }}</td>
               <td class="px-4 py-3 text-text-secondary">{{ entry.key }}</td>
             </tr>
@@ -127,7 +141,8 @@ const entries = ref<CompanyConcurrencyCounterDTO[]>([])
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 const search = ref('')
-const sortBy = ref<'value' | 'company_id' | 'key'>('value')
+const counterType = ref<'all' | 'company_concurrency' | 'company_outstanding_tasks'>('all')
+const sortBy = ref<'value' | 'company_id' | 'counter_type' | 'key'>('value')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const lastUpdated = ref<string | null>(null)
 const refreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
@@ -136,8 +151,15 @@ const filteredEntries = computed(() => {
   const query = search.value.trim().toLowerCase()
 
   const filtered = entries.value.filter((item) => {
+    if (counterType.value !== 'all' && item.counter_type !== counterType.value) {
+      return false
+    }
     if (!query) return true
-    return item.key.toLowerCase().includes(query) || item.company_id.toLowerCase().includes(query)
+    return (
+      item.key.toLowerCase().includes(query)
+      || item.company_id.toLowerCase().includes(query)
+      || item.counter_type.toLowerCase().includes(query)
+    )
   })
 
   return [...filtered].sort((a, b) => {
@@ -146,6 +168,8 @@ const filteredEntries = computed(() => {
       base = a.value - b.value
     } else if (sortBy.value === 'company_id') {
       base = a.company_id.localeCompare(b.company_id)
+    } else if (sortBy.value === 'counter_type') {
+      base = a.counter_type.localeCompare(b.counter_type)
     } else {
       base = a.key.localeCompare(b.key)
     }
