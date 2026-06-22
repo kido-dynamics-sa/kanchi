@@ -2,10 +2,12 @@ import os
 import logging
 import secrets
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
+BASE_DIR = Path(__file__).resolve().parent
 
 
 def _as_bool(value: Optional[str], default: bool = False) -> bool:
@@ -24,6 +26,24 @@ def _split_csv(value: Optional[str]) -> List[str]:
         if item:
             parts.append(item)
     return parts
+
+
+def _first_env(*names: str) -> str:
+    """Return the first non-empty environment variable from names."""
+    for name in names:
+        value = os.getenv(name)
+        if value and value.strip():
+            return value
+    return ""
+
+
+def _normalize_path_prefix(value: Optional[str]) -> str:
+    """Normalize a public mount path such as /kanchi."""
+    normalized = (value or "").strip()
+    if not normalized:
+        return ""
+    normalized = "/" + normalized.strip("/")
+    return "" if normalized == "/" else normalized
 
 
 def mask_sensitive_url(url: Optional[str]) -> Optional[str]:
@@ -70,6 +90,30 @@ class Config:
     log_level: str = os.getenv('LOG_LEVEL', 'INFO')
     log_format: str = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     log_file: str = os.getenv('LOG_FILE', 'kanchi.log')
+
+    # Frontend hosting
+    frontend_dist_dir: str = field(
+        default_factory=lambda: os.getenv('FRONTEND_DIST_DIR', str(BASE_DIR / 'ui'))
+    )
+    frontend_api_url: str = field(
+        default_factory=lambda: os.getenv('NUXT_PUBLIC_API_URL', '')
+    )
+    frontend_ws_url: str = field(
+        default_factory=lambda: os.getenv('NUXT_PUBLIC_WS_URL', '/ws')
+    )
+    frontend_url: str = field(
+        default_factory=lambda: os.getenv('NUXT_PUBLIC_FRONTEND_URL', '/ui')
+    )
+    frontend_url_prefix: str = field(
+        default_factory=lambda: os.getenv('NUXT_PUBLIC_URL_PREFIX', '')
+    )
+    asgi_root_path: str = field(
+        default_factory=lambda: _first_env(
+            'KANCHI_ROOT_PATH',
+            'ASGI_ROOT_PATH',
+            'NUXT_PUBLIC_URL_PREFIX',
+        )
+    )
 
     # Performance settings
     max_clients: int = int(os.getenv('MAX_WS_CLIENTS', 100))
@@ -129,6 +173,9 @@ class Config:
 
     def __post_init__(self) -> None:
         """Normalize secrets so we never operate with predictable defaults."""
+        self.frontend_url_prefix = _normalize_path_prefix(self.frontend_url_prefix)
+        self.asgi_root_path = _normalize_path_prefix(self.asgi_root_path)
+
         if self.session_secret_key == 'change-me':
             self.session_secret_key = secrets.token_urlsafe(32)
 

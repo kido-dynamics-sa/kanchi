@@ -1,7 +1,9 @@
 """Main FastAPI application for Celery Event Monitor."""
 
+import json
 import logging
 import threading
+from pathlib import Path
 from typing import Any, Dict, Optional
 import uvicorn
 from contextlib import asynccontextmanager
@@ -9,8 +11,9 @@ import sys
 import platform
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from config import Config, mask_sensitive_url
@@ -28,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 # Track application start time for uptime calculation
 APP_START_TIME = datetime.now(timezone.utc)
+
+
+def normalize_url_prefix(prefix: str) -> str:
+    """Normalize a public URL prefix such as /kanchi."""
+    normalized = prefix.strip()
+    if not normalized:
+        return ""
+    normalized = "/" + normalized.strip("/")
+    return "" if normalized == "/" else normalized
 
 
 class ApplicationState:
@@ -73,11 +85,41 @@ def create_app() -> FastAPI:
     config = Config.from_env()
     app_state.config = config
 
+    def prefixed_ui_path(prefix: str) -> str:
+        return f"{normalize_url_prefix(prefix)}/ui/"
+
+    def prefix_frontend_html_assets(html: str, prefix: str) -> str:
+        public_ui_path = f"{normalize_url_prefix(prefix)}/ui"
+        return html.replace('"/ui', f'"{public_ui_path}').replace("'/ui", f"'{public_ui_path}")
+
+    def inject_frontend_runtime_config(html: str, prefix: str) -> str:
+        env = {
+            "apiUrl": config.frontend_api_url,
+            "wsUrl": config.frontend_ws_url,
+            "frontendUrl": config.frontend_url,
+            "urlPrefix": prefix,
+        }
+        payload = json.dumps(env, separators=(",", ":")).replace("</script>", "<\\/script>")
+        script = f"<script>window.__KANCHI_BACKEND_URLS__={payload};</script>"
+        if "</head>" in html:
+            return html.replace("</head>", f"{script}</head>", 1)
+        return f"{script}{html}"
+
+    def is_frontend_html_response(request: Request, response) -> bool:
+        content_type = response.headers.get("content-type", "")
+        root_path = normalize_url_prefix(request.scope.get("root_path", ""))
+        path = request.scope.get("path", request.url.path)
+        local_path = path[len(root_path):] if root_path and path.startswith(root_path) else path
+        return local_path.startswith("/ui") and "text/html" in content_type
+
+    root_path = normalize_url_prefix(config.asgi_root_path)
+
     app = FastAPI(
         title="Celery Event Monitor",
         description="Real-time monitoring of Celery task events with WebSocket broadcasting",
         version="0.1.0",
-        lifespan=lifespan
+        lifespan=lifespan,
+        root_path=root_path,
     )
 
     allowed_origins = config.allowed_origins or ["*"]
@@ -91,6 +133,35 @@ def create_app() -> FastAPI:
 
     if config.allowed_hosts:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
+
+    frontend_url_prefix = normalize_url_prefix(config.frontend_url_prefix)
+    public_url_prefix = frontend_url_prefix or root_path
+
+    @app.middleware("http")
+    async def frontend_prefix_assets(request: Request, call_next):
+        response = await call_next(request)
+        request_prefix = public_url_prefix or normalize_url_prefix(
+            request.scope.get("root_path", "")
+        )
+        if not is_frontend_html_response(request, response):
+            return response
+
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+        body = b"".join(chunks)
+
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        headers.pop("content-type", None)
+        html = body.decode("utf-8")
+        if request_prefix:
+            html = prefix_frontend_html_assets(html, request_prefix)
+        return HTMLResponse(
+            inject_frontend_runtime_config(html, request_prefix),
+            status_code=response.status_code,
+            headers=headers,
+        )
 
     from api.task_routes import create_router as create_task_router
     from api.worker_routes import create_router as create_worker_router
@@ -206,6 +277,21 @@ def create_app() -> FastAPI:
         """Detailed health information (authentication required when enabled)."""
         return collect_health_metrics(include_database=True)
 
+    @app.get("/", include_in_schema=False)
+    async def frontend_root(request: Request):
+        root_path = request.scope.get("root_path", "")
+        return RedirectResponse(url=prefixed_ui_path(public_url_prefix or root_path))
+
+    frontend_dist_dir = Path(config.frontend_dist_dir)
+    if frontend_dist_dir.is_dir():
+        app.frontend(
+            "/ui",
+            directory=frontend_dist_dir,
+            fallback="index.html",
+        )
+    else:
+        logger.info("Frontend build directory not found at %s", frontend_dist_dir)
+
     return app
 
 
@@ -300,18 +386,18 @@ def start_monitor(config: Config):
     if app_state.monitor_thread and app_state.monitor_thread.is_alive():
         logger.warning("Monitor already running")
         return
-    
+
     logger.info(f"Starting Celery monitor with broker: {mask_sensitive_url(config.broker_url)}")
     app_state.monitor_instance = CeleryEventMonitor(
         broker_url=config.broker_url,
         allow_pickle_serialization=config.enable_pickle_serialization,
     )
-    
+
     app_state.monitor_instance.set_task_callback(app_state.event_handler.handle_task_event)
     app_state.monitor_instance.set_worker_callback(app_state.event_handler.handle_worker_event)
     app_state.monitor_instance.set_progress_callback(app_state.event_handler.handle_progress_event)
     app_state.monitor_instance.set_steps_callback(app_state.event_handler.handle_steps_event)
-    
+
     app_state.monitor_thread = threading.Thread(target=app_state.monitor_instance.start_monitoring)
     app_state.monitor_thread.daemon = True
     app_state.monitor_thread.start()
@@ -322,7 +408,7 @@ def start_health_monitor():
     if app_state.health_monitor:
         logger.warning("Health monitor already running")
         return
-        
+
     app_state.health_monitor = WorkerHealthMonitor(
         app_state.monitor_instance,
         app_state.db_manager,
@@ -347,11 +433,12 @@ def start_server():
     """Start the FastAPI server."""
     config = Config.from_env()
     app = create_app()
-    
+
     uvicorn.run(
         app,
         host=config.ws_host,
         port=config.ws_port,
+        root_path=normalize_url_prefix(config.asgi_root_path),
         log_level=config.log_level.lower(),
         reload=False
     )

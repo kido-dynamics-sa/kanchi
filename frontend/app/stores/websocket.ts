@@ -7,10 +7,26 @@ import { useWorkersStore } from './workers'
 import { useOrphanTasksStore } from './orphanTasks'
 import { useFailedTasksStore } from './failedTasks'
 import { useTaskActionsStore } from './taskActions'
+import { useBackendUrls } from '~/composables/useBackendUrls'
 
 export interface WebSocketMessage {
   type: string
   [key: string]: any
+}
+
+function normalizeWebSocketUrl(url: string): string {
+  if (url.startsWith('https://')) {
+    return `wss://${url.slice(8)}`
+  }
+  if (url.startsWith('http://')) {
+    return `ws://${url.slice(7)}`
+  }
+  return url
+}
+
+function appendWebSocketToken(url: string, token: string): string {
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}token=${encodeURIComponent(token)}`
 }
 
 export interface ConnectionInfo {
@@ -59,17 +75,11 @@ export const useWebSocketStore = defineStore('websocket', () => {
       isConnecting.value = true
       error.value = null
 
-      const config = useRuntimeConfig()
-      let wsUrl = config.public.wsUrl as string
+      const { wsUrl: configuredWsUrl } = useBackendUrls()
+      let wsUrl = normalizeWebSocketUrl(configuredWsUrl)
 
       if (authEnabled.value && accessToken.value) {
-        try {
-          const parsed = new URL(wsUrl)
-          parsed.searchParams.set('token', accessToken.value)
-          wsUrl = parsed.toString()
-        } catch (err) {
-          console.error('[WebSocket] Invalid WS URL:', err)
-        }
+        wsUrl = appendWebSocketToken(wsUrl, accessToken.value)
       }
 
       ws.value = new WebSocket(wsUrl)

@@ -1,15 +1,22 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+function normalizeBaseURL(value: string | undefined): string {
+  const base = value?.trim() || '/'
+  const withLeadingSlash = base.startsWith('/') ? base : `/${base}`
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+  app: {
+    baseURL: normalizeBaseURL(process.env.NUXT_APP_BASE_URL),
+  },
   modules: [
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
   ],
   runtimeConfig: {
     public: {
-      wsUrl: process.env.NUXT_PUBLIC_WS_URL || 'ws://localhost:8765/ws',
-      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8765',
       kanchiVersion: process.env.NUXT_PUBLIC_KANCHI_VERSION || 'dev'
     }
   },
