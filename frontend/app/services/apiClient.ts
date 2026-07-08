@@ -323,6 +323,15 @@ class ApiService {
     return response.data
   }
 
+  async revokeTask(taskId: string, terminate = true): Promise<any> {
+    const response = await this.api.request({
+      path: `/api/tasks/${encodeURIComponent(taskId)}/revoke`,
+      method: 'POST',
+      query: { terminate }
+    })
+    return response.data
+  }
+
   async resolveTask(taskId: string, resolvedBy?: string | null): Promise<any> {
     const response = await this.api.request({
       path: `/api/tasks/${taskId}/resolve`,

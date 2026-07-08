@@ -66,6 +66,18 @@
             <RefreshCw class="h-4 w-4" />
             Rerun
           </Button>
+          <Button
+            v-if="isCancelable"
+            variant="outline"
+            size="sm"
+            class="text-status-error hover:text-status-error"
+            :loading="isCanceling"
+            :disabled="isCanceling || !task"
+            @click="cancelDialogOpen = true"
+          >
+            <Ban class="h-4 w-4" />
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
@@ -387,14 +399,47 @@
     :is-loading="isRetrying"
     @confirm="handleRetryConfirm"
   />
+
+  <!-- Cancel Confirmation Dialog -->
+  <AlertDialog v-model:open="cancelDialogOpen">
+    <AlertDialogContent class="bg-background-surface border-border-subtle max-w-md">
+      <AlertDialogHeader>
+        <AlertDialogTitle class="text-base font-semibold text-text-primary">Cancel Task</AlertDialogTitle>
+        <AlertDialogDescription class="text-xs text-text-secondary">
+          Cancel this task? If it's already running, its worker process will be sent SIGTERM to stop it. This cannot be undone.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter class="gap-2">
+        <AlertDialogCancel class="h-8 text-xs bg-background-base text-text-primary border-border-subtle hover:bg-background-hover">
+          Keep Task
+        </AlertDialogCancel>
+        <AlertDialogAction
+          @click="handleCancelConfirm"
+          class="h-8 text-xs bg-red-600 text-white hover:bg-red-700"
+        >
+          Cancel Task
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ChevronLeft, AlertCircle, RefreshCw, CopyIcon, Check } from 'lucide-vue-next'
+import { ChevronLeft, AlertCircle, RefreshCw, Ban, CopyIcon, Check } from 'lucide-vue-next'
 import { Button } from '~/components/ui/button'
 import { Badge } from '~/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '~/components/ui/alert-dialog'
 import TimeDisplay from '~/components/TimeDisplay.vue'
 import UuidDisplay from '~/components/UuidDisplay.vue'
 import PayloadTruncationNotice from '~/components/PayloadTruncationNotice.vue'
@@ -407,6 +452,9 @@ const route = useRoute()
 const tasksStore = useTasksStore()
 const isRetrying = computed(() => tasksStore.isLoading)
 const retryDialogRef = ref<InstanceType<typeof RetryTaskConfirmDialog> | null>(null)
+const isCanceling = computed(() => tasksStore.isLoading)
+const cancelDialogOpen = ref(false)
+const CANCELABLE_STATUSES = ['PENDING', 'RECEIVED', 'RUNNING']
 
 const task = ref<TaskEventResponse | null>(null)
 const allEvents = ref<TaskEventResponse[]>([])
@@ -425,6 +473,11 @@ const statusVariant = computed(() => {
   if (!task.value) return 'default'
   if (task.value.is_orphan) return 'orphaned'
   return getStatusVariant(eventTypeToStatus(task.value.event_type))
+})
+
+const isCancelable = computed(() => {
+  if (!task.value || task.value.is_orphan) return false
+  return CANCELABLE_STATUSES.includes(eventTypeToStatus(task.value.event_type))
 })
 
 const taskId = computed(() => route.params.id as string)
@@ -511,6 +564,19 @@ const handleRetryConfirm = async () => {
     await fetchTaskData()
   } catch (error) {
     console.error('Failed to rerun task:', error)
+  }
+}
+
+const handleCancelConfirm = async () => {
+  if (!task.value?.task_id) return
+
+  try {
+    await tasksStore.revokeTask(task.value.task_id)
+    await fetchTaskData()
+  } catch (error) {
+    console.error('Failed to cancel task:', error)
+  } finally {
+    cancelDialogOpen.value = false
   }
 }
 

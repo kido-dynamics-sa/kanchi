@@ -209,7 +209,8 @@ def create_router(app_state) -> APIRouter:
 
     @router.get("/tasks/failed/recent", response_model=list[TaskEvent])
     async def get_recent_failed_tasks(
-        hours: int | None = Query(
+        hours: int
+        | None = Query(
             default=None,
             ge=1,
             le=168,
@@ -321,6 +322,38 @@ def create_router(app_state) -> APIRouter:
             "new_task_id": new_task_id,
             "task_name": original_task.task_name,
             "was_orphaned": orphaned_task is not None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @router.post("/tasks/{task_id}/revoke")
+    async def revoke_task(
+        task_id: str,
+        terminate: bool = Query(default=True),
+        session: Session = Depends(get_db),
+    ):
+        """Revoke (cancel) a task via Celery's control API.
+
+        With terminate=True (default), a task that is already executing is stopped by
+        sending SIGTERM to the worker process running it. With terminate=False, only
+        tasks that haven't started yet are prevented from running.
+        """
+        if not app_state.monitor_instance:
+            raise HTTPException(status_code=500, detail="Monitor not initialized")
+
+        task_service = TaskService(session)
+        task_events = task_service.get_task_events(task_id)
+        if not task_events:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        app_state.monitor_instance.app.control.revoke(
+            task_id, terminate=terminate, signal="SIGTERM"
+        )
+
+        return {
+            "status": "success",
+            "message": "Task revoked and terminated" if terminate else "Task revoked",
+            "task_id": task_id,
+            "terminate": terminate,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

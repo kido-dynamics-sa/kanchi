@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from typing import Any
 
 
+class ConcurrencyRedisError(RuntimeError):
+    """Raised when the Redis backend for concurrency counters is unreachable/unusable."""
+
+
 @dataclass
 class ConcurrencyEntry:
     """Single Redis counter entry."""
@@ -39,10 +43,19 @@ class CompanyConcurrencyService:
         try:
             redis_module = importlib.import_module("redis")
             redis_exceptions = importlib.import_module("redis.exceptions")
-        except ImportError:
-            return []
+        except ImportError as exc:
+            raise ConcurrencyRedisError(
+                "The 'redis' package is not installed on the server."
+            ) from exc
 
-        client = redis_module.Redis.from_url(self.redis_url, decode_responses=True)
+        client = redis_module.Redis.from_url(
+            self.redis_url, decode_responses=True, socket_connect_timeout=3
+        )
+
+        try:
+            client.ping()
+        except redis_exceptions.RedisError as exc:
+            raise ConcurrencyRedisError(f"Could not connect to Redis: {exc}") from exc
 
         keys: list[str] = []
         key_prefix_by_key: dict[str, str] = {}

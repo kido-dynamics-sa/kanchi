@@ -144,6 +144,18 @@ export const useTasksStore = defineStore('tasks', () => {
     }
   }
 
+  async function revokeTask(taskId: string, terminate = true) {
+    try {
+      error.value = null
+      const result = await apiService.revokeTask(taskId, terminate)
+      await fetchRecentEvents()
+      return result
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to cancel task'
+      throw err
+    }
+  }
+
   async function getTaskEvents(taskId: string): Promise<TaskEventResponse[]> {
     try {
       error.value = null
@@ -347,6 +359,7 @@ export const useTasksStore = defineStore('tasks', () => {
     fetchRecentEvents,
     fetchActiveTasks,
     retryTask,
+    revokeTask,
     getTaskEvents,
     getTaskProgress,
     getProgressSnapshot,
