@@ -16,8 +16,18 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { ChevronRight, ChevronDown, Clock, Hash, Database, Cpu, AlertTriangle, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Search, RefreshCw, CornerDownRight } from 'lucide-vue-next'
+import { ChevronRight, ChevronDown, Clock, Hash, Database, Cpu, AlertTriangle, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, Search, RefreshCw, CornerDownRight, Ban } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 import {Badge} from "~/components/ui/badge";
 import StatusDot from "~/components/StatusDot.vue";
@@ -70,6 +80,12 @@ const tasksStore = useTasksStore()
 const isRetrying = computed(() => tasksStore.isLoading)
 const currentRetryTaskId = ref<string | null>(null)
 const retryDialogRef = ref<InstanceType<typeof RetryTaskConfirmDialog> | null>(null)
+
+// Cancel/revoke functionality for running or queued tasks
+const isCanceling = computed(() => tasksStore.isLoading)
+const currentCancelTaskId = ref<string | null>(null)
+const cancelDialogOpen = ref(false)
+const CANCELABLE_STATUSES = ['PENDING', 'RECEIVED', 'RUNNING']
 
 const handleSearch = (value: string) => {
   searchInput.value = value
@@ -155,6 +171,30 @@ const getStatusMeta = (task: any) => {
   return {
     label: formatStatus(status),
     variant: getStatusVariant(status)
+  }
+}
+
+const isTaskCancelable = (task: any) => {
+  if (task?.is_orphan) return false
+  const status = eventTypeToStatus(task?.event_type || 'unknown')
+  return CANCELABLE_STATUSES.includes(status)
+}
+
+const openCancelDialog = (taskId: string) => {
+  currentCancelTaskId.value = taskId
+  cancelDialogOpen.value = true
+}
+
+const handleCancelConfirm = async () => {
+  if (!currentCancelTaskId.value) return
+
+  try {
+    await tasksStore.revokeTask(currentCancelTaskId.value)
+  } catch (error) {
+    console.error('Failed to cancel task:', error)
+  } finally {
+    currentCancelTaskId.value = null
+    cancelDialogOpen.value = false
   }
 }
 
@@ -327,6 +367,18 @@ const getProgressMessage = (snapshot: any) => snapshot?.latest?.message || ''
                         <RefreshCw class="h-4 w-4" />
                         Rerun
                       </Button>
+                      <Button
+                        v-if="isTaskCancelable(row.original)"
+                        variant="outline"
+                        size="xs"
+                        class="text-status-error hover:text-status-error"
+                        @click="openCancelDialog(row.original.task_id)"
+                        :disabled="isCanceling"
+                        :loading="isCanceling && currentCancelTaskId === row.original.task_id"
+                      >
+                        <Ban class="h-4 w-4" />
+                        Cancel
+                      </Button>
                     </template>
 
                     <!-- Retry Chain Section -->
@@ -473,4 +525,27 @@ const getProgressMessage = (snapshot: any) => snapshot?.latest?.message || ''
   @confirm="handleRetryConfirm"
   @cancel="handleRetryCancel"
   />
+
+  <!-- Cancel Confirmation Dialog -->
+  <AlertDialog v-model:open="cancelDialogOpen">
+    <AlertDialogContent class="bg-background-surface border-border-subtle max-w-md">
+      <AlertDialogHeader>
+        <AlertDialogTitle class="text-base font-semibold text-text-primary">Cancel Task</AlertDialogTitle>
+        <AlertDialogDescription class="text-xs text-text-secondary">
+          Cancel this task? If it's already running, its worker process will be sent SIGTERM to stop it. This cannot be undone.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter class="gap-2">
+        <AlertDialogCancel class="h-8 text-xs bg-background-base text-text-primary border-border-subtle hover:bg-background-hover">
+          Keep Task
+        </AlertDialogCancel>
+        <AlertDialogAction
+          @click="handleCancelConfirm"
+          class="h-8 text-xs bg-red-600 text-white hover:bg-red-700"
+        >
+          Cancel Task
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>
