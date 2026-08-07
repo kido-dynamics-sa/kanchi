@@ -29,7 +29,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-import {Badge} from "~/components/ui/badge";
+import { Switch } from '~/components/ui/switch'
+import { Label } from '~/components/ui/label'
 import StatusDot from "~/components/StatusDot.vue";
 import CopyButton from "~/components/CopyButton.vue";
 import SearchInput from "~/components/SearchInput.vue";
@@ -86,6 +87,14 @@ const isCanceling = computed(() => tasksStore.isLoading)
 const currentCancelTaskId = ref<string | null>(null)
 const cancelDialogOpen = ref(false)
 const CANCELABLE_STATUSES = ['PENDING', 'RECEIVED', 'RUNNING']
+
+const freshnessLabel = computed(() => {
+  if (!props.isLiveMode || props.secondsSinceUpdate === undefined) return null
+  const seconds = Math.floor(props.secondsSinceUpdate)
+  if (seconds < 5) return 'updated just now'
+  if (seconds < 60) return `updated ${seconds}s ago`
+  return `updated ${Math.floor(seconds / 60)}m ago`
+})
 
 const handleSearch = (value: string) => {
   searchInput.value = value
@@ -242,24 +251,19 @@ const getProgressMessage = (snapshot: any) => snapshot?.latest?.message || ''
 
       </div>
       
-      <!-- Live mode indicator badge -->
-      <Badge
-        v-if="isLiveMode"
-        @click="emit('toggleLiveMode')"
-        variant="success"
-
-      >
-        <StatusDot status="success" :pulse="true" class="mr-1.5" />
-        Live
-      </Badge>
-      <Badge
-        v-else
-        @click="emit('toggleLiveMode')"
-        variant="outline"
-        >
-        <StatusDot status="muted" class="mr-1.5" />
-        Start Live Mode
-      </Badge>
+      <!-- Live mode toggle -->
+      <div class="flex items-center gap-2">
+        <span v-if="freshnessLabel" class="text-xs text-text-muted">{{ freshnessLabel }}</span>
+        <Label for="live-mode-toggle" class="flex items-center gap-1.5 cursor-pointer select-none text-sm text-text-primary">
+          <StatusDot :status="isLiveMode ? 'success' : 'muted'" :pulse="isLiveMode" />
+          {{ isLiveMode ? 'Live' : 'Live Mode' }}
+        </Label>
+        <Switch
+          id="live-mode-toggle"
+          :checked="isLiveMode"
+          @update:checked="emit('toggleLiveMode')"
+        />
+      </div>
     </div>
 
     <Table>

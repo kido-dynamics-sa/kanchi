@@ -220,6 +220,7 @@ class QueueLoadSummary(BaseModel):
     scheduled_tasks: int = 0
     tracked_tasks: int = 0
     sampled_at: datetime
+    tier: str | None = None
 
 
 class CompanyConcurrencyCounter(BaseModel):
@@ -245,6 +246,7 @@ class WorkerInfo(BaseModel):
     loadavg: list[float] | None = None
     freq: float | None = None
     queues_subscribed: list[str] = Field(default_factory=list)
+    queue_tiers: list[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

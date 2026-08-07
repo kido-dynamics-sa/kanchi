@@ -9,6 +9,12 @@ from config import Config
 from models import WorkerInfo
 from security.dependencies import get_auth_dependency
 from services import WorkerService
+from services.queue_tier_service import parse_queue_tier
+
+
+def _queue_tiers(queue_names: list[str]) -> list[str]:
+    """Return the sorted, deduplicated set of priority tiers a worker is subscribed to."""
+    return sorted({tier for name in queue_names if (tier := parse_queue_tier(name))})
 
 
 def _get_worker_queue_subscriptions(app_state) -> dict[str, list[str]]:
@@ -72,6 +78,7 @@ def create_router(app_state) -> APIRouter:
             persisted_data = persisted_workers_data.get(hostname, {})
 
             data = {**persisted_data, **monitor_data}
+            subscribed_queues = queue_subscriptions.get(hostname, [])
 
             worker_info = WorkerInfo(
                 hostname=hostname,
@@ -84,7 +91,8 @@ def create_router(app_state) -> APIRouter:
                 sw_sys=data.get("sw_sys"),
                 loadavg=data.get("loadavg"),
                 freq=data.get("freq"),
-                queues_subscribed=queue_subscriptions.get(hostname, []),
+                queues_subscribed=subscribed_queues,
+                queue_tiers=_queue_tiers(subscribed_queues),
             )
             worker_list.append(worker_info)
 
@@ -107,6 +115,7 @@ def create_router(app_state) -> APIRouter:
             raise HTTPException(status_code=404, detail="Worker not found")
 
         data = {**(persisted_data or {}), **(monitor_data or {})}
+        subscribed_queues = queue_data or []
 
         return WorkerInfo(
             hostname=hostname,
@@ -119,7 +128,8 @@ def create_router(app_state) -> APIRouter:
             sw_sys=data.get("sw_sys"),
             loadavg=data.get("loadavg"),
             freq=data.get("freq"),
-            queues_subscribed=queue_data or [],
+            queues_subscribed=subscribed_queues,
+            queue_tiers=_queue_tiers(subscribed_queues),
         )
 
     @router.get("/workers/events/recent")

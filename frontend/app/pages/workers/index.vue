@@ -89,6 +89,24 @@
       </div>
     </div>
 
+    <div v-if="hasTieredWorkers" class="rounded-lg border border-border-subtle bg-background-surface overflow-hidden">
+      <div class="px-4 py-3 border-b border-border-subtle">
+        <h2 class="text-sm font-semibold text-text-primary">Workers Per Tier</h2>
+        <p class="text-xs text-text-muted">Priority tier(s) each worker is currently subscribed to.</p>
+      </div>
+      <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+        <div
+          v-for="tier in workersPerTier"
+          :key="tier.tier"
+          class="rounded-lg border border-border-subtle bg-background-base p-4"
+        >
+          <p class="text-xs uppercase tracking-wide text-text-muted">{{ tier.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-text-primary">{{ tier.workerCount }}</p>
+          <p class="mt-1 text-[11px] text-text-muted">worker{{ tier.workerCount === 1 ? '' : 's' }}</p>
+        </div>
+      </div>
+    </div>
+
     <div class="rounded-lg border border-border-subtle bg-background-surface overflow-hidden">
       <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
         <h2 class="text-sm font-semibold text-text-primary">Worker Inventory</h2>
@@ -152,6 +170,18 @@
                   <div class="flex justify-between gap-2">
                     <dt class="text-text-muted">Load Avg</dt>
                     <dd class="text-text-primary">{{ formatLoadAvg(worker.loadavg) }}</dd>
+                  </div>
+                  <div v-if="getQueueTiers(worker).length > 0" class="pt-1">
+                    <dt class="text-text-muted mb-1">Priority Tiers</dt>
+                    <dd class="flex flex-wrap gap-1">
+                      <span
+                        v-for="tier in getQueueTiers(worker)"
+                        :key="`${worker.hostname}-tier-${tier}`"
+                        class="inline-flex items-center rounded border border-border-subtle px-1.5 py-0.5 text-xs text-text-primary"
+                      >
+                        {{ formatTier(tier) }}
+                      </span>
+                    </dd>
                   </div>
                   <div class="pt-1">
                     <dt class="text-text-muted mb-1">Subscribed Queues</dt>
@@ -253,6 +283,25 @@ const filteredWorkers = computed(() => {
 const onlineCount = computed(() => workers.value.filter((w) => w.status === 'online').length)
 const totalActiveTasks = computed(() => workers.value.reduce((sum, w) => sum + (w.active_tasks || 0), 0))
 const totalProcessedTasks = computed(() => workers.value.reduce((sum, w) => sum + (w.processed_tasks || 0), 0))
+
+const TIERS = ['fast', 'medium', 'slow'] as const
+
+const formatTier = (tier: string) => tier.charAt(0).toUpperCase() + tier.slice(1)
+
+const getQueueTiers = (worker: any): string[] => {
+  const tiers = worker?.queue_tiers
+  return Array.isArray(tiers) ? tiers : []
+}
+
+const workersPerTier = computed(() => {
+  return TIERS.map((tier) => ({
+    tier,
+    label: formatTier(tier),
+    workerCount: workers.value.filter((w) => getQueueTiers(w).includes(tier)).length,
+  }))
+})
+
+const hasTieredWorkers = computed(() => workersPerTier.value.some((tier) => tier.workerCount > 0))
 
 const workerEventsByHostname = (hostname: string) => {
   return recentWorkerEvents.value.filter((event: any) => event.hostname === hostname)

@@ -106,6 +106,64 @@ export interface ActionConfigUpdateRequest {
 }
 
 /**
+ * AppConfigSnapshot
+ * Grouped configuration snapshot returned to clients.
+ */
+export interface AppConfigSnapshot {
+  /** Configuration for the task issue summary section. */
+  task_issue_summary: TaskIssueConfig;
+}
+
+/**
+ * AppSetting
+ * Database-backed application setting.
+ */
+export interface AppSetting {
+  /** Key */
+  key: string;
+  /** Value */
+  value: any;
+  /**
+   * Value Type
+   * @default "string"
+   */
+  value_type?: "string" | "number" | "boolean" | "json";
+  /** Label */
+  label?: string | null;
+  /** Description */
+  description?: string | null;
+  /** Category */
+  category?: string | null;
+  /**
+   * Created At
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * Updated At
+   * @format date-time
+   */
+  updated_at: string;
+}
+
+/**
+ * AppSettingUpdate
+ * Create/update payload for an application setting.
+ */
+export interface AppSettingUpdate {
+  /** Value */
+  value: any;
+  /** Value Type */
+  value_type?: "string" | "number" | "boolean" | "json" | null;
+  /** Label */
+  label?: string | null;
+  /** Description */
+  description?: string | null;
+  /** Category */
+  category?: string | null;
+}
+
+/**
  * AuthConfigResponse
  * Backend authentication configuration.
  */
@@ -184,6 +242,24 @@ export interface CircuitBreakerConfig {
    * Event context field used to group executions (e.g., root_id, task_id)
    */
   context_field?: string | null;
+}
+
+/**
+ * CompanyConcurrencyCounter
+ * Redis-backed company concurrency entry.
+ */
+export interface CompanyConcurrencyCounter {
+  /** Key */
+  key: string;
+  /** Company Id */
+  company_id: string;
+  /** Counter Type */
+  counter_type: string;
+  /**
+   * Value
+   * @default 0
+   */
+  value?: number;
 }
 
 /**
@@ -345,12 +421,66 @@ export interface LogoutRequest {
 }
 
 /**
+ * QueueLoadSummary
+ * Queue-level task load snapshot.
+ */
+export interface QueueLoadSummary {
+  /** Queue */
+  queue: string;
+  /**
+   * Running Tasks
+   * @default 0
+   */
+  running_tasks?: number;
+  /**
+   * Scheduled Tasks
+   * @default 0
+   */
+  scheduled_tasks?: number;
+  /**
+   * Tracked Tasks
+   * @default 0
+   */
+  tracked_tasks?: number;
+  /**
+   * Sampled At
+   * @format date-time
+   */
+  sampled_at: string;
+  /** Tier */
+  tier?: string | null;
+}
+
+/**
  * RefreshRequest
  * Refresh token request payload.
  */
 export interface RefreshRequest {
   /** Refresh Token */
   refresh_token: string;
+}
+
+/** ResolveTaskRequest */
+export interface ResolveTaskRequest {
+  /** Resolved By */
+  resolved_by?: string | null;
+}
+
+/**
+ * StepDefinition
+ * Single step definition for task progress.
+ */
+export interface StepDefinition {
+  /** Key */
+  key: string;
+  /** Label */
+  label: string;
+  /** Description */
+  description?: string | null;
+  /** Total */
+  total?: number | null;
+  /** Order */
+  order?: number | null;
 }
 
 /**
@@ -500,6 +630,72 @@ export interface TaskEvent {
   is_orphan?: boolean;
   /** Orphaned At */
   orphaned_at?: string | null;
+  /**
+   * Resolved
+   * @default false
+   */
+  resolved?: boolean;
+  /** Resolved By */
+  resolved_by?: string | null;
+  /** Resolved At */
+  resolved_at?: string | null;
+}
+
+/**
+ * TaskIssueConfig
+ * Configuration for the task issue summary section.
+ */
+export interface TaskIssueConfig {
+  /**
+   * Lookback Hours
+   * @min 1
+   * @max 168
+   * @default 24
+   */
+  lookback_hours?: number;
+}
+
+/**
+ * TaskProgressEvent
+ * Task progress update event.
+ */
+export interface TaskProgressEvent {
+  /** Task Id */
+  task_id: string;
+  /** Task Name */
+  task_name: string;
+  /** Progress */
+  progress: number;
+  /**
+   * Timestamp
+   * @format date-time
+   */
+  timestamp: string;
+  /** Step Key */
+  step_key?: string | null;
+  /** Message */
+  message?: string | null;
+  /** Meta */
+  meta?: object | null;
+  /**
+   * Event Type
+   * @default "kanchi-task-progress"
+   */
+  event_type?: "kanchi-task-progress";
+}
+
+/**
+ * TaskProgressSnapshot
+ * Aggregate view of progress and steps for a task.
+ */
+export interface TaskProgressSnapshot {
+  /** Task Id */
+  task_id: string;
+  latest?: TaskProgressEvent | null;
+  /** Steps */
+  steps?: StepDefinition[];
+  /** History */
+  history?: TaskProgressEvent[];
 }
 
 /**
@@ -751,6 +947,10 @@ export interface WorkerInfo {
   loadavg?: number[] | null;
   /** Freq */
   freq?: number | null;
+  /** Queues Subscribed */
+  queues_subscribed?: string[];
+  /** Queue Tiers */
+  queue_tiers?: string[];
 }
 
 /**
@@ -1178,6 +1378,25 @@ export class Api<
       }),
 
     /**
+     * @description Get latest progress, steps, and recent history for a task.
+     *
+     * @tags tasks
+     * @name GetTaskProgressApiTasksTaskIdProgressGet
+     * @summary Get Task Progress
+     * @request GET:/api/tasks/{task_id}/progress
+     */
+    getTaskProgressApiTasksTaskIdProgressGet: (
+      taskId: string,
+      params: RequestParams = {},
+    ) =>
+      this.request<TaskProgressSnapshot, HTTPValidationError>({
+        path: `/api/tasks/${taskId}/progress`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description Get currently active tasks.
      *
      * @tags tasks
@@ -1188,6 +1407,22 @@ export class Api<
     getActiveTasksApiTasksActiveGet: (params: RequestParams = {}) =>
       this.request<TaskEvent[], HTTPValidationError>({
         path: `/api/tasks/active`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get queue load snapshot grouped by queue.
+     *
+     * @tags tasks
+     * @name GetQueueLoadApiQueuesLoadGet
+     * @summary Get Queue Load
+     * @request GET:/api/queues/load
+     */
+    getQueueLoadApiQueuesLoadGet: (params: RequestParams = {}) =>
+      this.request<QueueLoadSummary[], HTTPValidationError>({
+        path: `/api/queues/load`,
         method: "GET",
         format: "json",
         ...params,
@@ -1221,9 +1456,9 @@ export class Api<
       query?: {
         /**
          * Hours
-         * @default 24
+         * Lookback window in hours (defaults to configured value)
          */
-        hours?: number;
+        hours?: number | null;
         /**
          * Limit
          * @default 50
@@ -1246,6 +1481,47 @@ export class Api<
       }),
 
     /**
+     * @description Manually mark a task as resolved without altering its state.
+     *
+     * @tags tasks
+     * @name ResolveTaskApiTasksTaskIdResolvePost
+     * @summary Resolve Task
+     * @request POST:/api/tasks/{task_id}/resolve
+     */
+    resolveTaskApiTasksTaskIdResolvePost: (
+      taskId: string,
+      data: ResolveTaskRequest | null,
+      params: RequestParams = {},
+    ) =>
+      this.request<any, HTTPValidationError>({
+        path: `/api/tasks/${taskId}/resolve`,
+        method: "POST",
+        body: data,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Remove manual resolution mark from a task.
+     *
+     * @tags tasks
+     * @name ClearTaskResolutionApiTasksTaskIdResolveDelete
+     * @summary Clear Task Resolution
+     * @request DELETE:/api/tasks/{task_id}/resolve
+     */
+    clearTaskResolutionApiTasksTaskIdResolveDelete: (
+      taskId: string,
+      params: RequestParams = {},
+    ) =>
+      this.request<any, HTTPValidationError>({
+        path: `/api/tasks/${taskId}/resolve`,
+        method: "DELETE",
+        format: "json",
+        ...params,
+      }),
+
+    /**
      * @description Retry a failed task by creating a new task with the same parameters.
      *
      * @tags tasks
@@ -1260,6 +1536,33 @@ export class Api<
       this.request<any, HTTPValidationError>({
         path: `/api/tasks/${taskId}/retry`,
         method: "POST",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Revoke (cancel) a task via Celery's control API. With terminate=True (default), a task that is already executing is stopped by sending SIGTERM to the worker process running it. With terminate=False, only tasks that haven't started yet are prevented from running.
+     *
+     * @tags tasks
+     * @name RevokeTaskApiTasksTaskIdRevokePost
+     * @summary Revoke Task
+     * @request POST:/api/tasks/{task_id}/revoke
+     */
+    revokeTaskApiTasksTaskIdRevokePost: (
+      taskId: string,
+      query?: {
+        /**
+         * Terminate
+         * @default true
+         */
+        terminate?: boolean;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.request<any, HTTPValidationError>({
+        path: `/api/tasks/${taskId}/revoke`,
+        method: "POST",
+        query: query,
         format: "json",
         ...params,
       }),
@@ -2263,6 +2566,124 @@ export class Api<
       }),
 
     /**
+     * @description List all Redis counters for company concurrency and outstanding tasks.
+     *
+     * @name ListCompanyConcurrencyApiConcurrencyCompanyGet
+     * @summary List Company Concurrency
+     * @request GET:/api/concurrency/company
+     */
+    listCompanyConcurrencyApiConcurrencyCompanyGet: (
+      query?: {
+        /**
+         * Limit
+         * @min 1
+         * @max 10000
+         * @default 2000
+         */
+        limit?: number;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.request<CompanyConcurrencyCounter[], HTTPValidationError>({
+        path: `/api/concurrency/company`,
+        method: "GET",
+        query: query,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get grouped application configuration with defaults applied.
+     *
+     * @tags config
+     * @name GetConfigSnapshotApiConfigGet
+     * @summary Get Config Snapshot
+     * @request GET:/api/config
+     */
+    getConfigSnapshotApiConfigGet: (params: RequestParams = {}) =>
+      this.request<AppConfigSnapshot, any>({
+        path: `/api/config`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description List all application settings.
+     *
+     * @tags config
+     * @name ListSettingsApiConfigSettingsGet
+     * @summary List Settings
+     * @request GET:/api/config/settings
+     */
+    listSettingsApiConfigSettingsGet: (params: RequestParams = {}) =>
+      this.request<AppSetting[], any>({
+        path: `/api/config/settings`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Get a single application setting.
+     *
+     * @tags config
+     * @name GetSettingApiConfigSettingsKeyGet
+     * @summary Get Setting
+     * @request GET:/api/config/settings/{key}
+     */
+    getSettingApiConfigSettingsKeyGet: (
+      key: string,
+      params: RequestParams = {},
+    ) =>
+      this.request<AppSetting, HTTPValidationError>({
+        path: `/api/config/settings/${key}`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Create or update an application setting.
+     *
+     * @tags config
+     * @name UpsertSettingApiConfigSettingsKeyPut
+     * @summary Upsert Setting
+     * @request PUT:/api/config/settings/{key}
+     */
+    upsertSettingApiConfigSettingsKeyPut: (
+      key: string,
+      data: AppSettingUpdate,
+      params: RequestParams = {},
+    ) =>
+      this.request<AppSetting, HTTPValidationError>({
+        path: `/api/config/settings/${key}`,
+        method: "PUT",
+        body: data,
+        type: ContentType.Json,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Delete a setting (falls back to default).
+     *
+     * @tags config
+     * @name DeleteSettingApiConfigSettingsKeyDelete
+     * @summary Delete Setting
+     * @request DELETE:/api/config/settings/{key}
+     */
+    deleteSettingApiConfigSettingsKeyDelete: (
+      key: string,
+      params: RequestParams = {},
+    ) =>
+      this.request<void, HTTPValidationError>({
+        path: `/api/config/settings/${key}`,
+        method: "DELETE",
+        ...params,
+      }),
+
+    /**
      * @description Public health endpoint without sensitive data.
      *
      * @name HealthCheckApiHealthGet
@@ -2287,6 +2708,22 @@ export class Api<
     healthDetailsApiHealthDetailsGet: (params: RequestParams = {}) =>
       this.request<any, any>({
         path: `/api/health/details`,
+        method: "GET",
+        format: "json",
+        ...params,
+      }),
+  };
+  metrics = {
+    /**
+     * No description
+     *
+     * @name MetricsMetricsGet
+     * @summary Metrics
+     * @request GET:/metrics
+     */
+    metricsMetricsGet: (params: RequestParams = {}) =>
+      this.request<any, any>({
+        path: `/metrics`,
         method: "GET",
         format: "json",
         ...params,

@@ -242,6 +242,10 @@ function clearRange() {
   open.value = false
 }
 
+const triggerTitle = computed(() =>
+  props.disabled ? 'Selecting a custom range will exit Live Mode' : undefined
+)
+
 function handleButtonClick() {
   if (props.disabled) {
     emit('disableLiveMode')
@@ -278,7 +282,8 @@ onMounted(() => {
         <Button
           variant="outline"
           @click="handleButtonClick"
-          class="justify-start text-left text-text-primary"
+          :title="triggerTitle"
+          :class="['justify-start text-left text-text-primary', { 'opacity-70': disabled }]"
         >
           <CalendarDays class="h-4 w-4" />
           {{ displayLabel || 'Select time range' }}

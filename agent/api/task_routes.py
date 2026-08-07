@@ -22,6 +22,7 @@ from services import (
     SessionService,
     TaskService,
 )
+from services.queue_tier_service import parse_queue_tier
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,9 @@ def create_router(app_state) -> APIRouter:
                     "sampled_at": sampled_at,
                 }
             )
+
+        for entry in queue_summary:
+            entry["tier"] = parse_queue_tier(entry["queue"])
 
         return queue_summary
 

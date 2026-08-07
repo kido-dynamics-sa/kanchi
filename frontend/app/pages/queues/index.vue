@@ -73,6 +73,26 @@
       </div>
     </div>
 
+    <div v-if="hasTieredQueues" class="rounded-lg border border-border-subtle bg-background-surface overflow-hidden">
+      <div class="px-4 py-3 border-b border-border-subtle">
+        <h2 class="text-sm font-semibold text-text-primary">Priority Tiers</h2>
+        <p class="text-xs text-text-muted">Aggregate load per company-bucket priority tier.</p>
+      </div>
+      <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+        <div
+          v-for="tier in tierSummary"
+          :key="tier.tier"
+          class="rounded-lg border border-border-subtle bg-background-base p-4"
+        >
+          <p class="text-xs uppercase tracking-wide text-text-muted">{{ tier.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-text-primary">{{ tier.running + tier.scheduled }}</p>
+          <p class="mt-1 text-[11px] text-text-muted">
+            {{ tier.running }} running · {{ tier.scheduled }} scheduled · {{ tier.queueCount }} queues
+          </p>
+        </div>
+      </div>
+    </div>
+
     <div class="rounded-lg border border-border-subtle bg-background-surface overflow-hidden">
       <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
         <h2 class="text-sm font-semibold text-text-primary">Queues</h2>
@@ -108,6 +128,7 @@
           <thead>
             <tr class="border-b border-border-subtle text-left text-text-muted">
               <th class="px-4 py-3 font-medium">Queue</th>
+              <th class="px-4 py-3 font-medium">Tier</th>
               <th class="px-4 py-3 font-medium">Workload</th>
               <th class="px-4 py-3 font-medium">Running</th>
               <th class="px-4 py-3 font-medium">Scheduled</th>
@@ -122,6 +143,7 @@
               class="border-b border-border-subtle/60 last:border-b-0"
             >
               <td class="px-4 py-3 text-text-primary font-medium">{{ item.queue }}</td>
+              <td class="px-4 py-3 text-text-secondary">{{ item.tier ? formatTier(item.tier) : '—' }}</td>
               <td class="px-4 py-3">
                 <div class="w-44">
                   <div class="h-2 w-full overflow-hidden rounded-full bg-background-base">
@@ -179,6 +201,25 @@ const sortBy = ref<'queue' | 'running_tasks' | 'scheduled_tasks' | 'tracked_task
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const urlQuerySync = useUrlQuerySync()
 const isInitializing = ref(true)
+
+const TIERS = ['fast', 'medium', 'slow'] as const
+
+const formatTier = (tier: string) => tier.charAt(0).toUpperCase() + tier.slice(1)
+
+const tierSummary = computed(() => {
+  return TIERS.map((tier) => {
+    const items = queueLoad.value.filter((item) => item.tier === tier)
+    return {
+      tier,
+      label: formatTier(tier),
+      queueCount: items.length,
+      running: items.reduce((sum, item) => sum + item.running_tasks, 0),
+      scheduled: items.reduce((sum, item) => sum + item.scheduled_tasks, 0),
+    }
+  })
+})
+
+const hasTieredQueues = computed(() => tierSummary.value.some((tier) => tier.queueCount > 0))
 
 const lastSampledAt = computed(() => queueLoad.value[0]?.sampled_at || null)
 const maxVisibleWorkload = computed(() => {
