@@ -109,6 +109,7 @@ export interface QueueLoadSummaryDTO {
   scheduled_tasks: number
   tracked_tasks: number
   sampled_at: string
+  tier?: string | null
 }
 
 export interface CompanyConcurrencyCounterDTO {

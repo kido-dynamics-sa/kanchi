@@ -1,10 +1,16 @@
 <template>
       <!-- Command Palette -->
-      <CommandPalette 
+      <CommandPalette
         :is-live-mode="tasksStore.isLiveMode"
         @toggle-live-mode="handleToggleLiveMode"
         @rerun-task="handleRerunTask"
       />
+
+      <!-- Page Heading -->
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-text-primary mb-1">Dashboard</h1>
+        <p class="text-text-secondary">Real-time overview of workers, failures, and orphaned tasks.</p>
+      </div>
 
       <!-- Workers Overview -->
       <div class="mb-6 workers-section">

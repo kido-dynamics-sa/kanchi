@@ -19,6 +19,7 @@ import {
 import Pill from "~/components/common/Pill.vue"
 import StatusPill from "~/components/StatusPill.vue"
 import {Badge} from "~/components/ui/badge";
+import { useApiService } from "~/services/apiClient"
 
 const { eventTypeToStatus, getStatusVariant, formatStatus } = useTaskStatus()
 
@@ -178,32 +179,29 @@ const lookupTask = async (taskId: string) => {
       return
     }
     
-    const response = await fetch(`http://localhost:8765/api/events/recent?limit=1000`)
-    if (response.ok) {
-      const responseData = await response.json()
+    const responseData = await useApiService().getRecentEvents({ limit: 1000 }) as any
 
-      let events = []
-      if (Array.isArray(responseData)) {
-        events = responseData
-      } else if (responseData.data && Array.isArray(responseData.data)) {
-        events = responseData.data
-      } else if (responseData.events && Array.isArray(responseData.events)) {
-        events = responseData.events
-      } else {
-        selectedTask.value = null
-        return
-      }
-
-      const task = events.find((event: any) => {
-        // Try multiple possible field names and matching strategies
-        const taskIdFields = [event.task_id, event.taskId, event.id, event.task]
-        return taskIdFields.some(field =>
-          field && field.toString().toLowerCase().includes(cleanTaskId.toLowerCase())
-        )
-      })
-
-      selectedTask.value = task || null
+    let events = []
+    if (Array.isArray(responseData)) {
+      events = responseData
+    } else if (responseData.data && Array.isArray(responseData.data)) {
+      events = responseData.data
+    } else if (responseData.events && Array.isArray(responseData.events)) {
+      events = responseData.events
+    } else {
+      selectedTask.value = null
+      return
     }
+
+    const task = events.find((event: any) => {
+      // Try multiple possible field names and matching strategies
+      const taskIdFields = [event.task_id, event.taskId, event.id, event.task]
+      return taskIdFields.some(field =>
+        field && field.toString().toLowerCase().includes(cleanTaskId.toLowerCase())
+      )
+    })
+
+    selectedTask.value = task || null
   } catch (error) {
     console.error('Failed to lookup task:', error)
     selectedTask.value = null
