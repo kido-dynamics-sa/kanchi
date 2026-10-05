@@ -24,8 +24,9 @@
     <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
       <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div>
-          <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Filter Queues</label>
+          <label for="queue-filter" class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Filter Queues</label>
           <input
+            id="queue-filter"
             v-model="queueNameFilter"
             type="text"
             placeholder="Search by queue name"
@@ -33,8 +34,9 @@
           />
         </div>
         <div>
-          <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Sort By</label>
+          <label for="queue-sort-by" class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Sort By</label>
           <select
+            id="queue-sort-by"
             v-model="sortBy"
             class="h-10 w-full rounded-md border border-border-subtle bg-background-base px-3 text-sm text-text-primary"
           >
@@ -46,8 +48,9 @@
           </select>
         </div>
         <div>
-          <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Order</label>
+          <label for="queue-sort-direction" class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Order</label>
           <select
+            id="queue-sort-direction"
             v-model="sortDirection"
             class="h-10 w-full rounded-md border border-border-subtle bg-background-base px-3 text-sm text-text-primary"
           >
@@ -65,11 +68,11 @@
       </div>
       <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
         <p class="text-xs uppercase tracking-wide text-text-muted">Running Tasks</p>
-        <p class="mt-2 text-2xl font-semibold text-text-primary">{{ filteredTotalRunning }}</p>
+        <p class="mt-2 text-2xl font-semibold text-text-primary">{{ formatNumber(filteredTotalRunning) }}</p>
       </div>
       <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
         <p class="text-xs uppercase tracking-wide text-text-muted">Scheduled Tasks</p>
-        <p class="mt-2 text-2xl font-semibold text-text-primary">{{ filteredTotalScheduled }}</p>
+        <p class="mt-2 text-2xl font-semibold text-text-primary">{{ formatNumber(filteredTotalScheduled) }}</p>
       </div>
     </div>
 
@@ -84,28 +87,27 @@
           :key="tier.tier"
           class="rounded-lg border border-border-subtle bg-background-base p-4"
         >
-          <p class="text-xs uppercase tracking-wide text-text-muted">{{ tier.label }}</p>
-          <p class="mt-2 text-2xl font-semibold text-text-primary">{{ tier.running + tier.scheduled }}</p>
+          <div class="flex items-center gap-2">
+            <Badge :variant="tierBadgeVariant(tier.tier)" class="text-[10px] px-1.5 py-0">{{ tier.label }}</Badge>
+          </div>
+          <p class="mt-2 text-2xl font-semibold text-text-primary">{{ formatNumber(tier.running + tier.scheduled) }}</p>
           <p class="mt-1 text-[11px] text-text-muted">
-            {{ tier.running }} running · {{ tier.scheduled }} scheduled · {{ tier.queueCount }} queues
+            {{ formatNumber(tier.running) }} running · {{ formatNumber(tier.scheduled) }} scheduled · {{ tier.queueCount }} {{ tier.queueCount === 1 ? 'queue' : 'queues' }}
           </p>
         </div>
       </div>
     </div>
 
     <div class="rounded-lg border border-border-subtle bg-background-surface overflow-hidden">
-      <div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between">
+      <div class="px-4 py-3 border-b border-border-subtle flex flex-wrap items-center justify-between gap-2">
         <h2 class="text-sm font-semibold text-text-primary">Queues</h2>
-        <div class="flex items-center gap-4">
-          <div class="hidden sm:flex items-center gap-3 text-[11px] text-text-muted">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex flex-wrap items-center gap-3 text-[11px] text-text-muted">
             <span class="inline-flex items-center gap-1">
-              <span class="h-2 w-2 rounded-full bg-status-warning"></span>
+              <span class="h-2 w-2 rounded-full bg-status-success"></span>
               Running
             </span>
-            <span class="inline-flex items-center gap-1">
-              <span class="h-2 w-2 rounded-full bg-status-info"></span>
-              Scheduled
-            </span>
+            <span>Scheduled color shows backlog severity</span>
           </div>
           <p class="text-xs text-text-muted" v-if="lastSampledAt">Sampled {{ formatSampledAt(lastSampledAt) }}</p>
         </div>
@@ -115,77 +117,164 @@
         Loading queue metrics...
       </div>
 
-      <div v-else-if="error" class="p-6 text-sm text-status-error">
-        {{ error }}
+      <div v-else-if="error" class="py-16 text-center">
+        <AlertCircle class="h-10 w-10 text-status-error mx-auto mb-3 opacity-40" />
+        <h3 class="text-sm font-medium text-text-primary mb-1">Couldn't load queue metrics</h3>
+        <p class="text-xs text-text-muted mb-6 max-w-sm mx-auto">{{ error }}</p>
+        <Button size="sm" :disabled="isLoading" @click="fetchQueueLoad">
+          <RefreshCw :class="['h-4 w-4 mr-1.5', isLoading ? 'animate-spin' : '']" />
+          Retry
+        </Button>
       </div>
 
-      <div v-else-if="filteredSortedQueueLoad.length === 0" class="p-6 text-sm text-text-secondary">
-        No queue activity found for the current environment.
+      <div v-else-if="filteredSortedQueueLoad.length === 0" class="py-16 text-center">
+        <Inbox class="h-10 w-10 text-text-muted mx-auto mb-3 opacity-40" />
+        <h3 class="text-sm font-medium text-text-primary mb-1">No queue activity found</h3>
+        <p class="text-xs text-text-muted mb-6 max-w-sm mx-auto">
+          Either this environment isn't connected to a broker yet, or no tasks have run recently for the current filter.
+        </p>
+        <NuxtLink to="/settings/workspace">
+          <Button size="sm" variant="outline">
+            Review environment settings
+          </Button>
+        </NuxtLink>
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-border-subtle text-left text-text-muted">
-              <th class="px-4 py-3 font-medium">Queue</th>
-              <th class="px-4 py-3 font-medium">Tier</th>
-              <th class="px-4 py-3 font-medium">Workload</th>
-              <th class="px-4 py-3 font-medium">Running</th>
-              <th class="px-4 py-3 font-medium">Scheduled</th>
-              <th class="px-4 py-3 font-medium">Tracked</th>
-              <th class="px-4 py-3 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="item in filteredSortedQueueLoad"
-              :key="item.queue"
-              class="border-b border-border-subtle/60 last:border-b-0"
-            >
-              <td class="px-4 py-3 text-text-primary font-medium">{{ item.queue }}</td>
-              <td class="px-4 py-3 text-text-secondary">{{ item.tier ? formatTier(item.tier) : '—' }}</td>
-              <td class="px-4 py-3">
-                <div class="w-44">
-                  <div class="h-2 w-full overflow-hidden rounded-full bg-background-base">
-                    <div class="flex h-full">
-                      <div
-                        class="h-full bg-status-warning"
-                        :style="{ width: `${getRunningWidth(item)}%` }"
-                      />
-                      <div
-                        class="h-full bg-status-info"
-                        :style="{ width: `${getScheduledWidth(item)}%` }"
-                      />
+      <template v-else>
+        <!-- Desktop / tablet table -->
+        <div class="hidden md:block overflow-x-auto">
+          <table class="w-full text-sm">
+            <caption class="sr-only">Per-queue running, scheduled and tracked task counts, sorted by {{ sortBy }}</caption>
+            <thead>
+              <tr class="border-b border-border-subtle text-left text-text-muted">
+                <th scope="col" class="px-4 py-3 font-medium">Queue</th>
+                <th scope="col" class="px-4 py-3 font-medium">Tier</th>
+                <th scope="col" class="px-4 py-3 font-medium">Workload</th>
+                <th scope="col" class="px-4 py-3 font-medium">Running</th>
+                <th scope="col" class="px-4 py-3 font-medium">Scheduled</th>
+                <th scope="col" class="px-4 py-3 font-medium">
+                  <TooltipProvider :delay-duration="200">
+                    <TooltipRoot>
+                      <TooltipTrigger as-child>
+                        <span class="inline-flex items-center gap-1 cursor-default">
+                          Tracked
+                          <Info class="h-3 w-3" aria-hidden="true" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent class="max-w-xs text-[11px]">
+                        Total tasks tracked for this queue right now, across every state (running, scheduled, success, failed) — not just active load.
+                      </TooltipContent>
+                    </TooltipRoot>
+                  </TooltipProvider>
+                </th>
+                <th scope="col" class="px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in filteredSortedQueueLoad"
+                :key="item.queue"
+                class="border-b border-border-subtle/60 last:border-b-0"
+              >
+                <td class="px-4 py-3 text-text-primary font-medium">
+                  <span class="block max-w-[220px] truncate" :title="item.queue">{{ item.queue }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <Badge v-if="item.tier" :variant="tierBadgeVariant(item.tier)" class="text-[10px] px-1.5 py-0">{{ formatTier(item.tier) }}</Badge>
+                  <span v-else class="text-text-secondary">—</span>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="w-44">
+                    <div class="h-2 w-full overflow-hidden rounded-full bg-background-base">
+                      <div class="flex h-full">
+                        <div
+                          class="h-full bg-status-success"
+                          :style="{ width: `${getRunningWidth(item)}%` }"
+                        />
+                        <div
+                          class="h-full"
+                          :class="severityMeta(item).barClass"
+                          :style="{ width: `${getScheduledWidth(item)}%` }"
+                        />
+                      </div>
+                    </div>
+                    <div class="mt-1.5 flex items-center gap-1.5">
+                      <Badge :variant="severityMeta(item).badgeVariant" class="text-[10px] px-1.5 py-0">{{ severityMeta(item).label }}</Badge>
+                      <span class="text-[11px] text-text-muted">{{ formatNumber(item.running_tasks + item.scheduled_tasks) }} active load</span>
                     </div>
                   </div>
-                  <p class="mt-1 text-[11px] text-text-muted">
-                    {{ item.running_tasks + item.scheduled_tasks }} active load
-                  </p>
-                </div>
-              </td>
-              <td class="px-4 py-3 text-text-primary">{{ item.running_tasks }}</td>
-              <td class="px-4 py-3 text-text-primary">{{ item.scheduled_tasks }}</td>
-              <td class="px-4 py-3 text-text-secondary">{{ item.tracked_tasks }}</td>
-              <td class="px-4 py-3">
-                <NuxtLink
-                  :to="getQueueDashboardLink(item.queue)"
-                  class="text-xs font-medium text-status-info hover:underline"
-                >
-                  Open In Dashboard
-                </NuxtLink>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                </td>
+                <td class="px-4 py-3 text-text-primary">{{ formatNumber(item.running_tasks) }}</td>
+                <td class="px-4 py-3 text-text-primary">{{ formatNumber(item.scheduled_tasks) }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ formatNumber(item.tracked_tasks) }}</td>
+                <td class="px-4 py-3">
+                  <NuxtLink
+                    :to="getQueueActionLink(item)"
+                    class="inline-flex items-center gap-1 text-xs font-medium text-status-info hover:underline"
+                  >
+                    {{ getSeverity(item) === 'healthy' ? 'Open In Dashboard' : 'Investigate In Dashboard' }}
+                    <ArrowRight class="h-3 w-3" />
+                  </NuxtLink>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Mobile card list -->
+        <div class="md:hidden divide-y divide-border-subtle">
+          <div
+            v-for="item in filteredSortedQueueLoad"
+            :key="item.queue"
+            class="p-4 space-y-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <p class="min-w-0 flex-1 truncate font-medium text-text-primary" :title="item.queue">{{ item.queue }}</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <Badge v-if="item.tier" :variant="tierBadgeVariant(item.tier)" class="text-[10px] px-1.5 py-0">{{ formatTier(item.tier) }}</Badge>
+              <Badge :variant="severityMeta(item).badgeVariant" class="text-[10px] px-1.5 py-0">{{ severityMeta(item).label }}</Badge>
+            </div>
+            <div class="h-2 w-full overflow-hidden rounded-full bg-background-base">
+              <div class="flex h-full">
+                <div class="h-full bg-status-success" :style="{ width: `${getRunningWidth(item)}%` }" />
+                <div class="h-full" :class="severityMeta(item).barClass" :style="{ width: `${getScheduledWidth(item)}%` }" />
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p class="text-[10px] uppercase tracking-wide text-text-muted">Running</p>
+                <p class="text-sm font-medium text-text-primary">{{ formatNumber(item.running_tasks) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase tracking-wide text-text-muted">Scheduled</p>
+                <p class="text-sm font-medium text-text-primary">{{ formatNumber(item.scheduled_tasks) }}</p>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase tracking-wide text-text-muted">Tracked</p>
+                <p class="text-sm font-medium text-text-primary">{{ formatNumber(item.tracked_tasks) }}</p>
+              </div>
+            </div>
+            <NuxtLink
+              :to="getQueueActionLink(item)"
+              class="flex items-center justify-center gap-1.5 rounded-md border border-border-subtle bg-background-base py-3 text-xs font-medium text-status-info active:bg-background-hover"
+            >
+              {{ getSeverity(item) === 'healthy' ? 'Open In Dashboard' : 'Investigate In Dashboard' }}
+              <ArrowRight class="h-3.5 w-3.5" />
+            </NuxtLink>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RefreshCw } from 'lucide-vue-next'
+import { RefreshCw, AlertCircle, Inbox, ArrowRight, Info } from 'lucide-vue-next'
 import { Button } from '~/components/ui/button'
+import { Badge, type BadgeVariants } from '~/components/ui/badge'
+import { TooltipProvider, TooltipRoot, TooltipTrigger, TooltipContent } from '~/components/ui/tooltip'
 import { useApiService, type QueueLoadSummaryDTO } from '~/services/apiClient'
 import type { UrlQueryState } from '~/composables/useUrlQuerySync'
 
@@ -204,7 +293,40 @@ const isInitializing = ref(true)
 
 const TIERS = ['fast', 'medium', 'slow'] as const
 
+// Distinct hues from severity (success/warning/error) so a tier chip is never mistaken for a health signal.
+const TIER_BADGE_VARIANT: Record<string, BadgeVariants['variant']> = {
+  fast: 'running',
+  medium: 'received',
+  slow: 'revoked',
+}
+
+type Severity = 'healthy' | 'elevated' | 'critical'
+
+// Workload bands are fixed and absolute, not relative to the busiest queue currently on screen —
+// otherwise a system-wide backlog just redefines "100%" and every bar looks proportionally fine.
+const SEVERITY_THRESHOLDS: Record<'elevated' | 'critical', number> = {
+  elevated: 20,
+  critical: 100,
+}
+
+const SEVERITY_META: Record<Severity, { label: string; badgeVariant: BadgeVariants['variant']; barClass: string }> = {
+  healthy: { label: 'Healthy', badgeVariant: 'success', barClass: 'bg-status-info' },
+  elevated: { label: 'Elevated', badgeVariant: 'pending', barClass: 'bg-status-warning' },
+  critical: { label: 'Critical', badgeVariant: 'failed', barClass: 'bg-status-error' },
+}
+
 const formatTier = (tier: string) => tier.charAt(0).toUpperCase() + tier.slice(1)
+const tierBadgeVariant = (tier: string): BadgeVariants['variant'] => TIER_BADGE_VARIANT[tier] ?? 'outline'
+const formatNumber = (value: number) => value.toLocaleString()
+
+const getSeverity = (item: QueueLoadSummaryDTO): Severity => {
+  const workload = item.running_tasks + item.scheduled_tasks
+  if (workload >= SEVERITY_THRESHOLDS.critical) return 'critical'
+  if (workload >= SEVERITY_THRESHOLDS.elevated) return 'elevated'
+  return 'healthy'
+}
+
+const severityMeta = (item: QueueLoadSummaryDTO) => SEVERITY_META[getSeverity(item)]
 
 const tierSummary = computed(() => {
   return TIERS.map((tier) => {
@@ -321,12 +443,19 @@ const formatSampledAt = (value: string) => {
   return parsed.toLocaleString()
 }
 
-const getQueueDashboardLink = (queue: string) => {
+// Healthy queues just link to the dashboard filtered to this queue. Queues past the healthy
+// band jump straight to the tasks that actually need attention (failed/retry/orphaned) for that
+// queue, since retry/revoke already live on the task detail and task list screens.
+const getQueueActionLink = (item: QueueLoadSummaryDTO) => {
+  if (getSeverity(item) === 'healthy') {
+    return {
+      path: '/',
+      query: { filters: `queue:is:${item.queue}` },
+    }
+  }
   return {
     path: '/',
-    query: {
-      filters: `queue:is:${queue}`
-    }
+    query: { filters: `queue:is:${item.queue};state:in:FAILED,RETRY,ORPHANED` },
   }
 }
 

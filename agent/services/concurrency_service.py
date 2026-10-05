@@ -19,6 +19,7 @@ class ConcurrencyEntry:
     company_id: str
     counter_type: str
     value: int
+    country_iso: str | None = None
 
 
 class CompanyConcurrencyService:
@@ -82,7 +83,8 @@ class CompanyConcurrencyService:
             if not key:
                 continue
             prefix = key_prefix_by_key.get(key, "")
-            company_id = key[len(prefix) :] if prefix and key.startswith(prefix) else key
+            suffix = key[len(prefix) :] if prefix and key.startswith(prefix) else key
+            country_iso, company_id = self._split_country(suffix)
             counter_type = prefix.removesuffix(":") if prefix else "unknown"
             entries.append(
                 ConcurrencyEntry(
@@ -90,10 +92,23 @@ class CompanyConcurrencyService:
                     company_id=company_id,
                     counter_type=counter_type,
                     value=self._to_int(raw_value),
+                    country_iso=country_iso,
                 )
             )
 
         return sorted(entries, key=lambda item: item.value, reverse=True)
+
+    @staticmethod
+    def _split_country(suffix: str) -> tuple[str | None, str]:
+        """Split ``<country_iso>:<company_id>`` from the part after the prefix.
+
+        kidoapp scopes counters per country backend; keys written before that
+        hold only the company id.
+        """
+        country_iso, sep, company_id = suffix.rpartition(":")
+        if not sep:
+            return None, suffix
+        return country_iso, company_id
 
     @staticmethod
     def _read_counter_values(

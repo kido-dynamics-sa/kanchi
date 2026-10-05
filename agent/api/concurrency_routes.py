@@ -81,6 +81,7 @@ def create_router(app_state) -> APIRouter:
                 "company_id": item.company_id,
                 "counter_type": item.counter_type,
                 "value": item.value,
+                "country_iso": item.country_iso,
             }
             for item in entries
         ]

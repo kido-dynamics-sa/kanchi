@@ -260,6 +260,8 @@ export interface CompanyConcurrencyCounter {
    * @default 0
    */
   value?: number;
+  /** Country Iso */
+  country_iso?: string | null;
 }
 
 /**

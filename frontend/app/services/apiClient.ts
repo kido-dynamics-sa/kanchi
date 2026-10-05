@@ -117,6 +117,7 @@ export interface CompanyConcurrencyCounterDTO {
   company_id: string
   counter_type: string
   value: number
+  country_iso?: string | null
 }
 
 class ApiService {
