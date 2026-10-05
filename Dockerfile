@@ -1,4 +1,4 @@
-FROM node:20-alpine as frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -51,8 +51,8 @@ ENV NUXT_PUBLIC_WS_URL=ws://localhost:8765/ws
 EXPOSE 8765 3000
 
 RUN echo '#!/bin/bash\n\
-cd /app/agent && python main.py &\n\
-cd /app/frontend && npm run preview &\n\
-wait' > /app/start.sh && chmod +x /app/start.sh
+    cd /app/agent && python main.py &\n\
+    cd /app/frontend && npm run preview &\n\
+    wait' > /app/start.sh && chmod +x /app/start.sh
 
 CMD ["/app/start.sh"]

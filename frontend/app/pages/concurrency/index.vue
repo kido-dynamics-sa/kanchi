@@ -22,13 +22,13 @@
     </div>
 
     <div class="rounded-lg border border-border-subtle bg-background-surface p-4">
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
         <div>
           <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Search</label>
           <input
             v-model="search"
             type="text"
-            placeholder="Filter by key or company UUID"
+            placeholder="Filter by key, country or company UUID"
             class="h-10 w-full rounded-md border border-border-subtle bg-background-base px-3 text-sm text-text-primary placeholder:text-text-muted"
           />
         </div>
@@ -44,6 +44,16 @@
           </select>
         </div>
         <div>
+          <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Country</label>
+          <select
+            v-model="country"
+            class="h-10 w-full rounded-md border border-border-subtle bg-background-base px-3 text-sm text-text-primary"
+          >
+            <option value="all">All</option>
+            <option v-for="iso in countryOptions" :key="iso" :value="iso">{{ iso }}</option>
+          </select>
+        </div>
+        <div>
           <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Sort By</label>
           <select
             v-model="sortBy"
@@ -51,11 +61,12 @@
           >
             <option value="value">Value</option>
             <option value="company_id">Company UUID</option>
+            <option value="country_iso">Country</option>
             <option value="counter_type">Counter Type</option>
             <option value="key">Key</option>
           </select>
         </div>
-        <div class="md:col-span-3">
+        <div class="md:col-span-4">
           <label class="mb-1 block text-xs uppercase tracking-wide text-text-muted">Order</label>
           <select
             v-model="sortDirection"
@@ -105,6 +116,7 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border-subtle text-left text-text-muted">
+              <th class="px-4 py-3 font-medium">Country</th>
               <th class="px-4 py-3 font-medium">Company UUID</th>
               <th class="px-4 py-3 font-medium">Counter Type</th>
               <th class="px-4 py-3 font-medium">Current Value</th>
@@ -117,6 +129,7 @@
               :key="entry.key"
               class="border-b border-border-subtle/60 last:border-b-0"
             >
+              <td class="px-4 py-3 text-text-secondary">{{ entry.country_iso || LEGACY_COUNTRY }}</td>
               <td class="px-4 py-3 text-text-primary font-medium">{{ entry.company_id }}</td>
               <td class="px-4 py-3 text-text-secondary">{{ entry.counter_type }}</td>
               <td class="px-4 py-3 text-text-primary">{{ entry.value }}</td>
@@ -142,10 +155,17 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const search = ref('')
 const counterType = ref<'all' | 'company_concurrency' | 'company_outstanding_tasks'>('all')
-const sortBy = ref<'value' | 'company_id' | 'counter_type' | 'key'>('value')
+const country = ref('all')
+const sortBy = ref<'value' | 'company_id' | 'country_iso' | 'counter_type' | 'key'>('value')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const lastUpdated = ref<string | null>(null)
 const refreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
+
+// Keys written before kidoapp scoped counters per country carry no country.
+const LEGACY_COUNTRY = 'unscoped'
+const countryOf = (item: CompanyConcurrencyCounterDTO) => item.country_iso || LEGACY_COUNTRY
+
+const countryOptions = computed(() => [...new Set(entries.value.map(countryOf))].sort())
 
 const filteredEntries = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -154,10 +174,14 @@ const filteredEntries = computed(() => {
     if (counterType.value !== 'all' && item.counter_type !== counterType.value) {
       return false
     }
+    if (country.value !== 'all' && countryOf(item) !== country.value) {
+      return false
+    }
     if (!query) return true
     return (
       item.key.toLowerCase().includes(query)
       || item.company_id.toLowerCase().includes(query)
+      || countryOf(item).toLowerCase().includes(query)
       || item.counter_type.toLowerCase().includes(query)
     )
   })
@@ -168,6 +192,8 @@ const filteredEntries = computed(() => {
       base = a.value - b.value
     } else if (sortBy.value === 'company_id') {
       base = a.company_id.localeCompare(b.company_id)
+    } else if (sortBy.value === 'country_iso') {
+      base = countryOf(a).localeCompare(countryOf(b))
     } else if (sortBy.value === 'counter_type') {
       base = a.counter_type.localeCompare(b.counter_type)
     } else {

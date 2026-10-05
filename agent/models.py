@@ -1,11 +1,19 @@
 import ast
+import logging
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from utils.payload_sanitizer import sanitize_payload
+from utils.payload_sanitizer import (
+    PLACEHOLDER_KEY,
+    PLACEHOLDER_MESSAGE,
+    PLACEHOLDER_TRUNCATED,
+    sanitize_payload,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class TaskEvent(BaseModel):
@@ -230,6 +238,7 @@ class CompanyConcurrencyCounter(BaseModel):
     company_id: str
     counter_type: str
     value: int = 0
+    country_iso: str | None = None
 
 
 class WorkerInfo(BaseModel):
